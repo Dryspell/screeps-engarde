@@ -4,6 +4,8 @@ export const upgraderTick = (creep: Creep) => {
   if (creep.store[RESOURCE_ENERGY] == 0 || (creep.memory.state === "harvesting" && creep.store.getFreeCapacity() > 0)) {
     const sources = creep.room.find(FIND_SOURCES);
     const naivestSource = getNaiveSource(sources, creep);
+    if (!naivestSource) return;
+
     const closestSource = creep.pos.findClosestByPath(sources);
 
     if (creep.harvest(closestSource ?? naivestSource) == ERR_NOT_IN_RANGE) {

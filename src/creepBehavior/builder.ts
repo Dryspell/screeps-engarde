@@ -27,6 +27,7 @@ export const builderTick = (creep: Creep) => {
     } else {
       const sources = creep.room.find(FIND_SOURCES);
       const naivestSource = getNaiveSource(sources, creep);
+      if (!naivestSource) return;
 
       if (creep.harvest(naivestSource) == ERR_NOT_IN_RANGE) {
         creep.moveTo(naivestSource, {

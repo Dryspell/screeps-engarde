@@ -95,7 +95,7 @@ export const handleBuilding = (controlledRooms: Room[]) => {
 
       const freeSpaceAroundSpawn = spaceAroundSpawn.filter(
         ([x, y]) =>
-          !structuresAroundSpawn.some(lookObject => !lookObject.structure && lookObject.x === x && lookObject.y === y)
+          !structuresAroundSpawn.some(lookObject => lookObject.structure && lookObject.x === x && lookObject.y === y)
       );
 
       for (const site of freeSpaceAroundSpawn) {
@@ -112,7 +112,7 @@ export const handleBuilding = (controlledRooms: Room[]) => {
           align: "left",
           opacity: 0.8
         });
-        // return 1;
+        break;
       }
     }
   });

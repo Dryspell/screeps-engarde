@@ -8,9 +8,12 @@ export const PATH_COLORS = {
 };
 
 export const getNaiveSource = (sources: Source[], creep: Creep) => {
-  const sourcesWithEnergy = sources.filter(source => source.energy > 0);
+  // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
+  const safeSources = sources.filter(source => {
+    return source.energy > 0 && source.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0;
+  });
 
-  return creep.pos.findClosestByPath(sourcesWithEnergy) ?? sources[0];
+  return creep.pos.findClosestByPath(safeSources);
 };
 
 export const findNaiveTarget = (targets: ConstructionSite[], creep: Creep) => {

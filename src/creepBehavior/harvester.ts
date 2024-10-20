@@ -4,6 +4,7 @@ export const harvesterTick = (creep: Creep) => {
   if (creep.store.getFreeCapacity() > 0) {
     const sources = creep.room.find(FIND_SOURCES);
     const naivestSource = getNaiveSource(sources, creep);
+    if (!naivestSource) return;
 
     if (creep.harvest(naivestSource) === ERR_NOT_IN_RANGE) {
       creep.memory.target = naivestSource.id;
