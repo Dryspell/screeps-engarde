@@ -1,4 +1,23 @@
-import { generateBody, isValidRole, ROLES } from "./utils";
+import { isValidRole, ROLES } from "creepBehavior/roles";
+import { generateBody } from "./utils";
+
+export const nameCreep = (role: string) => `${role}${Game.time}`;
+
+const energyProduction = (room: Room) => {
+  const sources = room.find(FIND_SOURCES);
+  const regenerationTime = 300; //sources.reduce((acc, source) => acc + source.ticksToRegeneration, 0);
+  const workParts = room.find(FIND_MY_CREEPS).reduce((acc, creep) => acc + creep.getActiveBodyparts(WORK), 0);
+
+  const energyPotential = sources.length * 3000;
+  const production = workParts * regenerationTime;
+
+  Game.time % 5 === 0 &&
+    console.log(
+      `[${Game.time.toLocaleString()}] Room ${room.name} Energy Production: ${production}/${energyPotential}`
+    );
+
+  return [workParts * regenerationTime, sources.length * 3000] as [production: number, energyPotential: number];
+};
 
 export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
   const sortedRoles = Object.entries(ROLES).sort(
@@ -17,12 +36,17 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       return;
     }
 
+    const [production, energyPotential] = energyProduction(spawn.room);
+    if (production > energyPotential) return;
+
     if (
-      sortedRoles.every(
+      spawn.room.find(FIND_MY_CREEPS).length &&
+      (sortedRoles.every(
         ([_, { body }]) =>
           generateBody(spawn.room.energyAvailable, body).length <
           generateBody(spawn.room.energyCapacityAvailable, body).length
-      )
+      ) ||
+        sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0) >= creeps.length)
     )
       return;
 
@@ -37,11 +61,15 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
 
       const newBody = generateBody(spawn.room.energyAvailable, body);
       if (
-        spawn.spawnCreep(newBody, `${role}${Game.time}`, {
+        spawn.spawnCreep(newBody, nameCreep(role), {
           memory: { role, room: spawn.room.name, spawn: spawn.name }
         }) === OK
       ) {
-        console.log(`[${Game.time.toLocaleString()}] Spawning new ${role} with body: [${newBody.join(", ")}]`);
+        console.log(
+          `[${Game.time.toLocaleString()}] Room ${spawn.room.name}: Spawning new ${role} with body: [${newBody.join(
+            ", "
+          )}]`
+        );
       }
       return;
     }

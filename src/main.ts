@@ -1,8 +1,8 @@
 import { ErrorMapper } from "utils/ErrorMapper";
 import { handleBuilding } from "buildings/construction";
 import { handleSpawning } from "spawning/spawning";
-import { ROLES } from "spawning/utils";
 import { towerBehavior } from "buildings/towers";
+import { ROLES } from "creepBehavior/roles";
 
 declare global {
   interface RoomMemory {

@@ -1,6 +1,14 @@
 import { getNaiveSource, PATH_COLORS } from "./utils";
 
 export const upgraderTick = (creep: Creep) => {
+  if (creep.room.energyAvailable < creep.room.energyCapacityAvailable) {
+    creep.memory.role = "harvester";
+    creep.say("harvester");
+    console.log(`[${creep.name}]: Switching to harvester`);
+
+    return;
+  }
+
   if (creep.store[RESOURCE_ENERGY] == 0 || (creep.memory.state === "harvesting" && creep.store.getFreeCapacity() > 0)) {
     const sources = creep.room.find(FIND_SOURCES);
     const naivestSource = getNaiveSource(sources, creep);

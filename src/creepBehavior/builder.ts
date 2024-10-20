@@ -1,5 +1,6 @@
 import { getExits } from "buildings/utils";
 import { findNaiveTarget, getNaiveSource, PATH_COLORS } from "./utils";
+import { upgraderTick } from "./upgrader";
 
 export const builderTick = (creep: Creep) => {
   const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
@@ -49,6 +50,13 @@ export const builderTick = (creep: Creep) => {
       const [roomName, { room, constructionSites }] = roomsWithSites[0];
       const target = findNaiveTarget(constructionSites, creep);
       creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "building"] } });
+    } else {
+      creep.memory.role = "upgrader";
+      creep.say("upgrader");
+      console.log(`[${creep.name}]: Switching to upgrader`);
+      // creep.name = `${creep.memory.role}${Game.time}`;
+
+      return upgraderTick(creep);
     }
   }
 };

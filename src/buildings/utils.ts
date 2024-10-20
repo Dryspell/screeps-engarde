@@ -9,11 +9,11 @@ export const MAX_ROOM_EXTENSIONS = {
   8: 60
 } as const;
 
-export const buildRoadFromPosToSet = (room: Room, pos: RoomPosition, set: RoomPosition[]) => {
+export const buildRoadFromPosToSet = (room: Room, pos: RoomPosition, set: RoomPosition[], omitLast: boolean = true) => {
   const posPathsToSet = set
     .map(source => pos.findPathTo(source, { ignoreCreeps: true }))
     .sort((a, b) => a.length - b.length)
-    .map(path => path.slice(0, path.length - 1));
+    .map(path => (omitLast ? path.slice(0, path.length - 1) : path));
 
   for (const path of posPathsToSet) {
     for (const pathStep of path) {

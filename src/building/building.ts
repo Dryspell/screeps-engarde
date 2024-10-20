@@ -1,5 +1,5 @@
-import { handleBuildingTowers } from "./towers";
-import { buildRoadFromPosToSet, getExits, MAX_ROOM_EXTENSIONS } from "./utils";
+import { handleBuildingTowers } from "../buildings/towers";
+import { buildRoadFromPosToSet, getExits, MAX_ROOM_EXTENSIONS } from "../buildings/utils";
 
 export const handleBuilding = (controlledRooms: Room[]) => {
   controlledRooms.forEach(room => {
@@ -41,19 +41,16 @@ export const handleBuilding = (controlledRooms: Room[]) => {
     let roadConstructionSitesCount = constructionSites.filter(site => site.structureType === STRUCTURE_ROAD).length;
 
     // Build roads to Energy Sources
-    // if (roadConstructionSitesCount < 2) {
-    roadConstructionSitesCount += buildRoadFromPosToSet(
-      room,
-      spawn.pos,
-      roomSources.map(source => source.pos)
-    );
-    // }
+    if (roadConstructionSitesCount < 2) {
+      roadConstructionSitesCount += buildRoadFromPosToSet(
+        room,
+        spawn.pos,
+        roomSources.map(source => source.pos)
+      );
+    }
 
     // Build roads to controller
-    if (
-      // roadConstructionSitesCount < 2 &&
-      room.controller
-    ) {
+    if (roadConstructionSitesCount < 2 && room.controller) {
       roadConstructionSitesCount += buildRoadFromPosToSet(
         room,
         room.controller.pos,
@@ -62,13 +59,13 @@ export const handleBuilding = (controlledRooms: Room[]) => {
     }
 
     // Build roads to exits
-    // if (roadConstructionSitesCount < 2) {
-    const closest = exits
-      .map(({ exitDirection }) => spawn.pos.findClosestByPath(room.find(exitDirection)))
-      .filter(Boolean) as RoomPosition[];
+    if (roadConstructionSitesCount < 2) {
+      const closest = exits
+        .map(({ exitDirection }) => spawn.pos.findClosestByPath(room.find(exitDirection)))
+        .filter(Boolean) as RoomPosition[];
 
-    roadConstructionSitesCount += buildRoadFromPosToSet(room, spawn.pos, closest, false);
-    // }
+      roadConstructionSitesCount += buildRoadFromPosToSet(room, spawn.pos, closest);
+    }
 
     // Build extensions around the spawn if there are less than MAX_ROOM_EXTENSIONS
     if (
@@ -98,8 +95,7 @@ export const handleBuilding = (controlledRooms: Room[]) => {
 
       const freeSpaceAroundSpawn = spaceAroundSpawn.filter(
         ([x, y]) =>
-          !structuresAroundSpawn.some(lookObject => lookObject.structure && lookObject.x === x && lookObject.y === y) &&
-          !constructionSites.some(site => site.pos.x === x && site.pos.y === y)
+          !structuresAroundSpawn.some(lookObject => !lookObject.structure && lookObject.x === x && lookObject.y === y)
       );
 
       for (const site of freeSpaceAroundSpawn) {
@@ -116,7 +112,7 @@ export const handleBuilding = (controlledRooms: Room[]) => {
           align: "left",
           opacity: 0.8
         });
-        break;
+        // return 1;
       }
     }
   });
