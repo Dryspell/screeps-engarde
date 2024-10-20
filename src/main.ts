@@ -1,11 +1,20 @@
 import { ErrorMapper } from "utils/ErrorMapper";
-import { handleBuilding } from "building";
-import { handleSpawning, ROLES } from "spawning";
+import { handleBuilding } from "building/building";
+import { handleSpawning } from "spawning/spawning";
+import { ROLES } from "spawning/utils";
 
 declare global {
+  interface RoomMemory {
+    spawns: { id: string; pos: RoomPosition }[];
+    sources: { id: string; pos: RoomPosition }[];
+    controller: { id: string; pos: RoomPosition } | undefined;
+    containsHostiles: boolean;
+  }
+
   interface Memory {
     uuid: number;
     log: any;
+    rooms: { [roomName: string]: RoomMemory };
   }
 
   interface CreepMemory {
@@ -13,7 +22,7 @@ declare global {
     room: string;
     target?: string;
     spawn?: string;
-    state?: "harvesting" | "upgrading" | "transferring" | "building";
+    state?: "harvesting" | "upgrading" | "transferring" | "building" | "surveying" | "claiming";
     // working: boolean;
   }
 
@@ -32,7 +41,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
   handleSpawning(spawns, creeps);
 
-  const controlledRooms = spawns.map(spawn => spawn.room);
+  const controlledRooms = Object.values(Game.rooms);
   handleBuilding(controlledRooms);
 
   creeps.forEach(creep => {
