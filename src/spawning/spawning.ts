@@ -31,7 +31,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       if (
         !isValidRole(role) ||
         !spawnCondition(spawn.room) ||
-        creeps.filter(creep => creep.room.name === spawn.room.name && creep.memory.role === role).length < max
+        creeps.filter(creep => creep.room.name === spawn.room.name && creep.memory.role === role).length >= max
       )
         continue;
 

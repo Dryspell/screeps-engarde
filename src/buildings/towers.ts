@@ -42,3 +42,35 @@ export function handleBuildingTowers(
     }
   }
 }
+
+export function towerBehavior(controlledRooms: Room[]) {
+  controlledRooms.forEach(room => {
+    const towers = room.find(FIND_MY_STRUCTURES, {
+      filter: { structureType: STRUCTURE_TOWER }
+    }) as StructureTower[];
+
+    const centroid = towers
+      .map(tower => tower.pos)
+      .reduce(
+        (acc, pos) => {
+          return [acc[0] + pos.x, acc[1] + pos.y] as [x: number, y: number];
+        },
+        [0, 0] as [x: number, y: number]
+      );
+
+    const closestHostile = new RoomPosition(...centroid, room.name).findClosestByRange(FIND_HOSTILE_CREEPS);
+    if (closestHostile) {
+      towers.forEach(tower => tower.attack(closestHostile));
+      return;
+    }
+
+    const damagedStructures = room.find(FIND_STRUCTURES, {
+      filter: structure => structure.hits < structure.hitsMax && structure.structureType !== STRUCTURE_WALL
+    }) as AnyStructure[];
+
+    if (damagedStructures.length) {
+      towers.forEach(tower => tower.repair(damagedStructures[0]));
+      return;
+    }
+  });
+}

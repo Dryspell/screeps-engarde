@@ -2,8 +2,6 @@ import { handleBuildingTowers } from "./towers";
 import { buildRoadFromPosToSet, getExits, MAX_ROOM_EXTENSIONS } from "./utils";
 
 export const handleBuilding = (controlledRooms: Room[]) => {
-  console.log(`Controlled Rooms: ${controlledRooms.map(room => room.name).join(", ")}`);
-
   controlledRooms.forEach(room => {
     const extensions = room.find(FIND_MY_STRUCTURES, {
       filter: { structureType: STRUCTURE_EXTENSION }

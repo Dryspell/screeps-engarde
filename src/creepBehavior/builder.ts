@@ -1,4 +1,4 @@
-import { getExits } from "building/utils";
+import { getExits } from "buildings/utils";
 import { findNaiveTarget, getNaiveSource, PATH_COLORS } from "./utils";
 
 export const builderTick = (creep: Creep) => {
