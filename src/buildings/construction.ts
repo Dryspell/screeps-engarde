@@ -3,9 +3,6 @@ import { buildRoadFromPosToSet, getExits, MAX_ROOM_EXTENSIONS } from "./utils";
 
 export const handleBuilding = (controlledRooms: Room[]) => {
   controlledRooms.forEach(room => {
-    const extensions = room.find(FIND_MY_STRUCTURES, {
-      filter: { structureType: STRUCTURE_EXTENSION }
-    }) as StructureExtension[];
     const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
     const roomSources = room.find(FIND_SOURCES);
 
@@ -31,8 +28,11 @@ export const handleBuilding = (controlledRooms: Room[]) => {
     if (!spawn) {
       return;
     }
-
     const exits = getExits(room);
+
+    const extensions = room.find(FIND_MY_STRUCTURES, {
+      filter: { structureType: STRUCTURE_EXTENSION }
+    }) as StructureExtension[];
 
     if ((room.controller?.level ?? 0) >= 3) {
       handleBuildingTowers(room, constructionSites, spawn, roomSources);

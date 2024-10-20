@@ -3,12 +3,29 @@ import { handleBuilding } from "buildings/construction";
 import { handleSpawning } from "spawning/spawning";
 import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
+import { getExits } from "buildings/utils";
+import { architectRoom } from "architect";
+
+type MemorizedPath<T extends _HasId> = { targetId: Id<T>; path: PathStep[]; constructedRoad: boolean };
 
 declare global {
   interface RoomMemory {
-    spawns: { id: string; pos: RoomPosition }[];
-    sources: { id: string; pos: RoomPosition }[];
+    spawns: {
+      id: string;
+      pos: RoomPosition;
+      pathsToExits: { exitRoom: string; path: PathStep[] | null; constructedRoad: boolean }[];
+      pathToController: MemorizedPath<StructureController> | null;
+      pathsToSources: MemorizedPath<Source>[];
+      pathsToMinerals: MemorizedPath<Mineral>[];
+    }[];
+    sources: { id: Id<Source>; pos: RoomPosition; pathToController: PathStep[] | null }[];
     controller: { id: string; pos: RoomPosition } | undefined;
+    minerals: { id: Id<Mineral>; pos: RoomPosition }[];
+    towers: {
+      id: string;
+      pos: RoomPosition;
+    }[];
+    exits: ReturnType<typeof getExits>;
     containsHostiles: boolean;
   }
 
@@ -39,18 +56,25 @@ export const loop = ErrorMapper.wrapLoop(() => {
   // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
   const creeps = Object.values(Game.creeps);
   const spawns = Object.values(Game.spawns);
-
-  handleSpawning(spawns, creeps);
-
   const controlledRooms = Object.values(Game.rooms);
-  handleBuilding(controlledRooms);
 
-  creeps.forEach(creep => {
-    // console.log(`Creep: ${creep.name} - Role: ${creep.memory.role}`);
-    ROLES[creep.memory.role].tick(creep);
-  });
+  if (!Memory.rooms) {
+    Memory.rooms = {};
+  }
 
-  towerBehavior(controlledRooms);
+  for (const room of controlledRooms) {
+    architectRoom(room);
+  }
+
+  // handleSpawning(spawns, creeps);
+  // handleBuilding(controlledRooms);
+
+  // creeps.forEach(creep => {
+  //   // console.log(`Creep: ${creep.name} - Role: ${creep.memory.role}`);
+  //   ROLES[creep.memory.role].tick(creep);
+  // });
+
+  // towerBehavior(controlledRooms);
 
   // Automatically delete memory of missing creeps
   for (const name in Memory.creeps) {
