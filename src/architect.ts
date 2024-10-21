@@ -105,36 +105,54 @@ export const getPlannedRoads = (room: Room) => {
   );
 };
 
+const MAX_TOWERS_IN_ROOM = 5;
+
 const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
   const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
   const towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[];
 
-  if (!Memory.rooms[room.name].towers) {
-    Memory.rooms[room.name].towers = towers.map(tower => ({
-      id: tower.id,
-      pos: tower.pos,
-      planned: false
-    }));
+  if (!Memory.rooms[room.name].towers || Memory.rooms[room.name].towers?.length < MAX_TOWERS_IN_ROOM) {
+    Memory.rooms[room.name].towers = [
+      ...towers.map(tower => ({
+        id: tower.id,
+        pos: tower.pos,
+        planned: false
+      })),
+      ...constructionSites
+        .filter(site => site.structureType === STRUCTURE_TOWER)
+        .map(site => ({
+          id: site.id,
+          pos: site.pos,
+          planned: false
+        }))
+    ];
   }
 
   // Build a tower near the centroid of the spawner, controller and sources
-  if (Memory.rooms[room.name].towers.length < 6) {
-    const towerSpace = Math.ceil(Math.sqrt(6)) + 1;
+  if (Memory.rooms[room.name].towers.length < MAX_TOWERS_IN_ROOM) {
+    const referenceStructures = [roomController, ...room.find(FIND_SOURCES), spawn];
+    const centroid = referenceStructures
+      .reduce((acc, structure) => [acc[0] + structure.pos.x, acc[1] + structure.pos.y] as [x: number, y: number], [
+        0, 0
+      ] as [x: number, y: number])
+      .map(coord => Math.round(coord / referenceStructures.length)) as [x: number, y: number];
 
-    const spaceAroundSpawn = Array.from({ length: towerSpace ** 2 }, (_, i) => i).map(i => {
-      const x = roomController.pos.x + (i % towerSpace) - Math.floor(towerSpace / 2);
-      const y = roomController.pos.y + Math.floor(i / towerSpace) - Math.floor(towerSpace / 2);
+    const towerSpace = Math.ceil(Math.sqrt(9)) + 1;
+
+    const spaceAroundCentroid = Array.from({ length: towerSpace ** 2 }, (_, i) => i).map(i => {
+      const x = centroid[0] + (i % towerSpace) - Math.floor(towerSpace / 2);
+      const y = centroid[1] + Math.floor(i / towerSpace) - Math.floor(towerSpace / 2);
       return [x, y] as [x: number, y: number];
     });
 
     const plannedRoads = getPlannedRoads(room).map(({ x, y }) => ({ x, y }));
 
-    const structuresAroundSpawn = room
+    const structuresAroundCentroid = room
       .lookAtArea(
-        roomController.pos.y - Math.floor(towerSpace / 2),
-        roomController.pos.x - Math.floor(towerSpace / 2),
-        roomController.pos.y + Math.floor(towerSpace / 2),
-        roomController.pos.x + Math.floor(towerSpace / 2),
+        centroid[1] - Math.floor(towerSpace / 2),
+        centroid[0] - Math.floor(towerSpace / 2),
+        centroid[1] + Math.floor(towerSpace / 2),
+        centroid[0] + Math.floor(towerSpace / 2),
         true
       )
       .filter(
@@ -147,12 +165,12 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
       .concat(constructionSites.map(({ pos }) => ({ x: pos.x, y: pos.y })))
       .concat(plannedRoads);
 
-    const freeSpaceAroundSpawn = spaceAroundSpawn
-      .filter(([x, y]) => !structuresAroundSpawn.some(lookObject => lookObject.x === x && lookObject.y === y))
+    const freeSpaceAroundCentroid = spaceAroundCentroid
+      .filter(([x, y]) => !structuresAroundCentroid.some(lookObject => lookObject.x === x && lookObject.y === y))
       .sort((spaceA, spaceB) => spawn.pos.getRangeTo(spaceA[0], spaceA[1]) - spawn.pos.getRangeTo(spaceB[0], spaceB[1]))
-      .slice(constructionSites.filter(site => site.structureType === STRUCTURE_TOWER).length + towers.length, 1);
+      .slice(0, MAX_TOWERS_IN_ROOM);
 
-    freeSpaceAroundSpawn.forEach(([x, y]) => {
+    freeSpaceAroundCentroid.forEach(([x, y]) => {
       if (!Memory.rooms[room.name].towers.some(tower => tower.pos.x === x && tower.pos.y === y)) {
         Memory.rooms[room.name].towers.push({
           id: "",
@@ -163,21 +181,29 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
     });
 
     if (VISUALIZE_TOWERS) {
-      freeSpaceAroundSpawn.forEach(([x, y]) => {
+      freeSpaceAroundCentroid.forEach(([x, y]) => {
         room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
       });
     }
 
     if (VISUALIZE_ONLY) return;
 
-    freeSpaceAroundSpawn.forEach(([x, y]) => {
-      if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) {
-        console.log(`[${Game.time.toLocaleString()}] Building tower at ${x}, ${y}`);
-        room.visual.text(`🏗️ Building Tower`, x + 1, y, {
-          align: "left",
-          opacity: 0.8
-        });
-      }
+    freeSpaceAroundCentroid
+      .slice(constructionSites.filter(site => site.structureType === STRUCTURE_TOWER).length + towers.length, 1)
+      .forEach(([x, y]) => {
+        if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) {
+          console.log(`[${Game.time.toLocaleString()}] Building tower at ${x}, ${y}`);
+          room.visual.text(`🏗️ Building Tower`, x + 1, y, {
+            align: "left",
+            opacity: 0.8
+          });
+        }
+      });
+  }
+
+  if (VISUALIZE_TOWERS) {
+    Memory.rooms[room.name].towers.forEach(tower => {
+      room.visual.circle(tower.pos.x, tower.pos.y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
     });
   }
 };
@@ -309,6 +335,8 @@ function constructSpawn(room: Room, roomController: StructureController, roomSou
   }
 }
 
+const planAndBuildWalls = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {};
+
 export const architectRoom = (room: Room) => {
   memorizeRoom(room);
 
@@ -334,4 +362,5 @@ export const architectRoom = (room: Room) => {
   createRoadsForPaths(room);
   planAndBuildTowers(room, spawn, roomController);
   planAndBuildExtensions(room, spawn, roomController);
+  // planAndBuildWalls(room, spawn, roomController);
 };

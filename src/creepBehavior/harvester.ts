@@ -20,7 +20,7 @@ export const harvesterTick = (creep: Creep) => {
     }
   }
 
-  if (creep.store.getFreeCapacity() > 0) {
+  if (creep.store[RESOURCE_ENERGY] === 0) {
     const sources = creep.room.find(FIND_SOURCES);
     const naivestSource = getNaiveSource(sources, creep);
     if (!naivestSource) return;
