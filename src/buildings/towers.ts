@@ -1,3 +1,5 @@
+import { getPlannedRoads } from "architect";
+
 export function handleBuildingTowers(
   room: Room,
   constructionSites: ConstructionSite<BuildableStructureConstant>[],
@@ -64,8 +66,17 @@ export function towerBehavior(controlledRooms: Room[]) {
       return;
     }
 
+    const plannedRoads = getPlannedRoads(room).map(({ x, y }) => ({ x, y }));
+
     const damagedStructures = room.find(FIND_STRUCTURES, {
-      filter: structure => structure.hits < structure.hitsMax && structure.structureType !== STRUCTURE_WALL
+      filter: structure =>
+        structure.hits < structure.hitsMax &&
+        structure.structureType !== STRUCTURE_WALL &&
+        structure.structureType !== STRUCTURE_RAMPART &&
+        // Only repair planned roads
+        (structure.structureType === STRUCTURE_ROAD
+          ? plannedRoads.some(road => road.x === structure.pos.x && road.y === structure.pos.y)
+          : true)
     }) as AnyStructure[];
 
     if (damagedStructures.length) {

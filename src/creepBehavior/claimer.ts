@@ -1,18 +1,12 @@
 import { getExits } from "buildings/utils";
 import { PATH_COLORS } from "./utils";
+import { memorizeRoom } from "memorizeRoom";
 
 export const claimerTick = (creep: Creep) => {
   // If the room isn't in memory, memorize it
-  if (!Memory.rooms) {
-    Memory.rooms = {};
-  }
+
   if (!Memory.rooms?.[creep.room.name]) {
-    Memory.rooms[creep.room.name] = {
-      sources: creep.room.find(FIND_SOURCES).map(source => ({ id: source.id, pos: source.pos })),
-      controller: creep.room.controller && { id: creep.room.controller?.id, pos: creep.room.controller?.pos },
-      spawns: creep.room.find(FIND_MY_SPAWNS).map(spawn => ({ id: spawn.id, pos: spawn.pos })),
-      containsHostiles: creep.room.find(FIND_HOSTILE_CREEPS).length > 0
-    };
+    memorizeRoom(creep.room);
   }
 
   // If the room is claimed, move to the next room
