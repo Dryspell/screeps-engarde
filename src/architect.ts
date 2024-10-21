@@ -17,7 +17,7 @@ const createRoads = <T extends _HasId | string>(room: Room, memorizedPath: Memor
       return room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD);
     } else return OK;
   });
-  if (roadResults.every(result => result === OK)) {
+  if (roadResults.every(result => result === OK || result === ERR_INVALID_TARGET)) {
     memorizedPath.constructedRoad = true;
   } else {
     // console.log(
@@ -186,7 +186,7 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
     filter: { structureType: STRUCTURE_EXTENSION }
   }) as StructureExtension[];
 
-  if (!Memory.rooms[room.name].extensions) {
+  if (!Memory.rooms[room.name].extensions.length) {
     Memory.rooms[room.name].extensions = [
       ...extensions.map(extensions => ({
         id: extensions.id,
@@ -198,7 +198,7 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
         .map(site => ({
           id: site.id,
           pos: site.pos,
-          planned: true
+          planned: false
         }))
     ];
   }
@@ -237,6 +237,17 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
       ([x, y]) => !structuresAroundSpawn.some(lookObject => lookObject.x === x && lookObject.y === y)
     );
 
+    // Memorize the free space around the spawn as planned extensions
+    freeSpaceAroundSpawn.forEach(([x, y]) => {
+      if (!Memory.rooms[room.name].extensions.some(extension => extension.pos.x === x && extension.pos.y === y)) {
+        Memory.rooms[room.name].extensions.push({
+          id: "",
+          pos: new RoomPosition(x, y, room.name),
+          planned: true
+        });
+      }
+    });
+
     if (VISUALIZE_EXTENSIONS) {
       freeSpaceAroundSpawn.forEach(([x, y]) => {
         room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "green" });
@@ -257,6 +268,18 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
             align: "left",
             opacity: 0.8
           });
+          const existingMemorizedExtension = Memory.rooms[room.name].extensions.find(
+            extension => extension.pos.x === x && extension.pos.y === y
+          );
+          if (existingMemorizedExtension) {
+            existingMemorizedExtension.planned = false;
+          } else {
+            Memory.rooms[room.name].extensions.push({
+              id: "",
+              pos: new RoomPosition(x, y, room.name),
+              planned: true
+            });
+          }
         }
       });
   }

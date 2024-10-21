@@ -56,27 +56,50 @@ export const builderTick = (creep: Creep) => {
         });
       }
     }
-    // If there are no construction sites, find a room with construction sites
   } else {
-    const exitRooms = getExits(creep.room).map(exit => exit.roomName);
-    const roomsWithSites = Object.entries(Game.rooms)
-      .map(([roomName, room]) => [roomName, { room, constructionSites: room.find(FIND_CONSTRUCTION_SITES) }] as const)
-      .filter(
-        ([roomName, roomWithSites]) => roomWithSites.constructionSites.length > 0 && exitRooms.includes(roomName)
-      );
+    // If there is a building that is unplanned, dismantle it
+    const structures = creep.room
+      .find(FIND_MY_STRUCTURES)
+      .filter(structure => structure.structureType === STRUCTURE_EXTENSION);
 
-    if (roomsWithSites.length) {
-      // Go to the first room with construction sites
-      const [roomName, { room, constructionSites }] = roomsWithSites[0];
-      const target = findNaiveTarget(constructionSites, creep);
-      creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "building"] } });
-    } else {
-      creep.memory.role = "upgrader";
-      creep.say("upgrader");
-      console.log(`[${creep.name}]: Switching to upgrader`);
-      // creep.name = `${creep.memory.role}${Game.time}`;
+    const plannedExtensions = Memory.rooms[creep.room.name].extensions.map(
+      extension => `${extension.pos.x}_${extension.pos.y}`
+    );
 
-      return upgraderTick(creep);
+    const unplannedStructure = structures.find(
+      structure => !plannedExtensions.includes(`${structure.pos.x}_${structure.pos.y}`)
+    );
+
+    if (unplannedStructure) {
+      if (creep.dismantle(unplannedStructure) === ERR_NOT_IN_RANGE) {
+        creep.moveTo(unplannedStructure, {
+          visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "building"] }
+        });
+      }
+    }
+
+    // If there are no construction sites, find a room with construction sites
+    else {
+      const exitRooms = getExits(creep.room).map(exit => exit.roomName);
+      const roomsWithSites = Object.entries(Game.rooms)
+        .map(([roomName, room]) => [roomName, { room, constructionSites: room.find(FIND_CONSTRUCTION_SITES) }] as const)
+        .filter(
+          ([roomName, roomWithSites]) => roomWithSites.constructionSites.length > 0 && exitRooms.includes(roomName)
+        );
+
+      if (roomsWithSites.length) {
+        // Go to the first room with construction sites
+        const [roomName, { room, constructionSites }] = roomsWithSites[0];
+        const target = findNaiveTarget(constructionSites, creep);
+        creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "building"] } });
+      } else {
+        creep.memory.role = "upgrader";
+        creep.say("upgrader");
+        console.log(`[${creep.name}]: Switching to upgrader`);
+        // creep.name = `${creep.memory.role}${Game.time}`;
+
+        return upgraderTick(creep);
+      }
     }
   }
 };

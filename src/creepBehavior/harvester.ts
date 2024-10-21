@@ -2,7 +2,11 @@ import { getNaiveSource, getNaiveTransferTarget, PATH_COLORS } from "./utils";
 
 export const harvesterTick = (creep: Creep) => {
   if (creep.room.energyAvailable >= creep.room.energyCapacityAvailable) {
-    if (creep.room.find(FIND_MY_CONSTRUCTION_SITES).length) {
+    if (
+      creep.room.find(FIND_MY_CONSTRUCTION_SITES).length &&
+      creep.room.controller &&
+      creep.room.controller.ticksToDowngrade > 1000
+    ) {
       creep.memory.role = "builder";
       creep.say("builder");
       console.log(`[${creep.name}]: Switching to builder`);
