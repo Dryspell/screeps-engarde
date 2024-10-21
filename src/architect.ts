@@ -217,27 +217,37 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
   }
 };
 
-const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
+export const getExistingExtensions = (
+  room: Room,
+  constructionSites: ConstructionSite<BuildableStructureConstant>[] = room.find(FIND_MY_CONSTRUCTION_SITES),
+  extensions = room.find(FIND_MY_STRUCTURES, {
+    filter: { structureType: STRUCTURE_EXTENSION }
+  }) as StructureExtension[]
+) => {
+  return (Memory.rooms[room.name].extensions = [
+    ...extensions.map(extensions => ({
+      id: extensions.id,
+      pos: extensions.pos,
+      planned: false
+    })),
+    ...constructionSites
+      .filter(site => site.structureType === STRUCTURE_EXTENSION)
+      .map(site => ({
+        id: site.id,
+        pos: site.pos,
+        planned: false
+      }))
+  ]);
+};
+
+export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
   const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
   const extensions = room.find(FIND_MY_STRUCTURES, {
     filter: { structureType: STRUCTURE_EXTENSION }
   }) as StructureExtension[];
 
   if (!Memory.rooms[room.name].extensions?.length) {
-    Memory.rooms[room.name].extensions = [
-      ...extensions.map(extensions => ({
-        id: extensions.id,
-        pos: extensions.pos,
-        planned: false
-      })),
-      ...constructionSites
-        .filter(site => site.structureType === STRUCTURE_EXTENSION)
-        .map(site => ({
-          id: site.id,
-          pos: site.pos,
-          planned: false
-        }))
-    ];
+    Memory.rooms[room.name].extensions = getExistingExtensions(room, constructionSites, extensions);
   }
 
   if (Memory.rooms[room.name].extensions.length < MAX_ROOM_EXTENSIONS[8]) {

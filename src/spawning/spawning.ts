@@ -11,7 +11,7 @@ const energyProduction = (room: Room) => {
   const energyPotential = sources.length * 3000;
   const production = workParts * regenerationTime;
 
-  Game.time % 5 === 0 &&
+  Game.time % 20 === 0 &&
     console.log(
       `[${Game.time.toLocaleString()}] Room ${room.name} Energy Production: ${production}/${energyPotential}`
     );
@@ -37,7 +37,10 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
     }
 
     const [production, energyPotential] = energyProduction(spawn.room);
-    if (production > energyPotential) return;
+    if (production > 2 * energyPotential) {
+      // console.log(`[${Game.time.toLocaleString()}] Room${spawn.room.name} Too much energy production`);
+      return;
+    }
 
     if (
       spawn.room.find(FIND_MY_CREEPS).length &&
@@ -46,10 +49,14 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
           generateBody(spawn.room.energyAvailable, body).length <
           generateBody(spawn.room.energyCapacityAvailable, body).length
       )
-    )
+    ) {
       return;
+    }
 
-    if (creeps.length >= sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)) {
+    if (
+      creeps.filter(creep => creep.room.name === spawn.room.name).length >=
+      sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)
+    ) {
       return;
     }
 

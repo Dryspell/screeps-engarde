@@ -1,6 +1,7 @@
 import { getExits } from "buildings/utils";
 import { findNaiveTarget, getNaiveSource, PATH_COLORS } from "./utils";
 import { upgraderTick } from "./upgrader";
+import { getExistingExtensions, getPlannedRoads } from "architect";
 
 export const builderTick = (creep: Creep) => {
   const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
@@ -66,15 +67,25 @@ export const builderTick = (creep: Creep) => {
       .find(FIND_MY_STRUCTURES)
       .filter(structure => structure.structureType === STRUCTURE_EXTENSION);
 
-    const plannedExtensions = Memory.rooms[creep.room.name].extensions.map(
-      extension => `${extension.pos.x}_${extension.pos.y}`
-    );
+    const plannedExtensions = Memory.rooms[creep.room.name].extensions
+      .filter(struct => struct.planned === true)
+      .map(extension => `${extension.pos.x}_${extension.pos.y}`);
+
+    const plannedRoads = getPlannedRoads(creep.room).map(road => `${road.x}_${road.y}`);
+
+    if (plannedExtensions.some(extension => plannedRoads.includes(extension))) {
+      console.log(`Unexpected overlap between planned extensions and roads`);
+      console.log(`Recomputing planned extensions`);
+      Memory.rooms[creep.room.name].extensions = getExistingExtensions(creep.room);
+      // return;
+    }
 
     const unplannedStructure = structures.find(
       structure => !plannedExtensions.includes(`${structure.pos.x}_${structure.pos.y}`)
     );
 
     if (unplannedStructure) {
+      creep.say("dismantling");
       if (creep.dismantle(unplannedStructure) === ERR_NOT_IN_RANGE) {
         creep.moveTo(unplannedStructure, {
           visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "building"] }

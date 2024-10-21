@@ -20,10 +20,10 @@ export const ROLES = {
     body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
     max: 6,
     tick: builderTick,
-    spawnCondition: (room: Room) =>
-      Object.values(Game.rooms).some(
-        room => room.find(FIND_MY_CONSTRUCTION_SITES).length > 0 || room.find(FIND_MY_SPAWNS).length === 0
-      )
+    spawnCondition: (room: Room) => true
+    // Object.values(Game.rooms).some(
+    //   room => room.find(FIND_MY_CONSTRUCTION_SITES).length > 0 || room.find(FIND_MY_SPAWNS).length === 0
+    // )
   },
   claimer: {
     body: [CLAIM, MOVE] satisfies BodyPartConstant[],
