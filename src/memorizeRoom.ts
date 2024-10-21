@@ -49,7 +49,11 @@ function memorizeSourceData(source: Source) {
     id: source.id,
     pos: source.pos,
     pathToController: source.room.controller
-      ? source.pos.findPathTo(source.room.controller.pos, { ignoreCreeps: true })
+      ? {
+          targetId: source.room.controller.id,
+          path: source.pos.findPathTo(source.room.controller.pos, { ignoreCreeps: true }),
+          constructedRoad: false
+        }
       : null
   };
 }

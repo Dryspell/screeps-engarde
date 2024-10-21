@@ -2,11 +2,18 @@ import { getNaiveSource, getNaiveTransferTarget, PATH_COLORS } from "./utils";
 
 export const harvesterTick = (creep: Creep) => {
   if (creep.room.energyAvailable >= creep.room.energyCapacityAvailable) {
-    creep.memory.role = "upgrader";
-    creep.say("upgrader");
-    console.log(`[${creep.name}]: Switching to upgrader`);
+    if (creep.room.find(FIND_MY_CONSTRUCTION_SITES).length) {
+      creep.memory.role = "builder";
+      creep.say("builder");
+      console.log(`[${creep.name}]: Switching to builder`);
+      return;
+    } else {
+      creep.memory.role = "upgrader";
+      creep.say("upgrader");
+      console.log(`[${creep.name}]: Switching to upgrader`);
 
-    return;
+      return;
+    }
   }
 
   if (creep.store.getFreeCapacity() > 0) {

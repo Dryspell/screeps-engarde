@@ -1,5 +1,4 @@
 import { ErrorMapper } from "utils/ErrorMapper";
-import { handleBuilding } from "buildings/construction";
 import { handleSpawning } from "spawning/spawning";
 import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
@@ -22,7 +21,7 @@ declare global {
       pathsToSources: MemorizedPath<Source>[];
       pathsToMinerals: MemorizedPath<Mineral>[];
     }[];
-    sources: { id: Id<Source>; pos: RoomPosition; pathToController: PathStep[] | null }[];
+    sources: { id: Id<Source>; pos: RoomPosition; pathToController: MemorizedPath<StructureController> | null }[];
     controller: { id: string; pos: RoomPosition } | undefined;
     minerals: { id: Id<Mineral>; pos: RoomPosition }[];
     towers: {
@@ -68,19 +67,18 @@ export const loop = ErrorMapper.wrapLoop(() => {
     Memory.rooms = {};
   }
 
-  for (const room of controlledRooms) {
+  controlledRooms.forEach(room => {
     architectRoom(room);
-  }
+  });
 
-  // handleSpawning(spawns, creeps);
-  // handleBuilding(controlledRooms);
+  handleSpawning(spawns, creeps);
 
-  // creeps.forEach(creep => {
-  //   // console.log(`Creep: ${creep.name} - Role: ${creep.memory.role}`);
-  //   ROLES[creep.memory.role].tick(creep);
-  // });
+  creeps.forEach(creep => {
+    // console.log(`Creep: ${creep.name} - Role: ${creep.memory.role}`);
+    ROLES[creep.memory.role].tick(creep);
+  });
 
-  // towerBehavior(controlledRooms);
+  towerBehavior(controlledRooms);
 
   // Automatically delete memory of missing creeps
   for (const name in Memory.creeps) {

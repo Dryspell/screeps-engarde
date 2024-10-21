@@ -14,8 +14,16 @@ export const builderTick = (creep: Creep) => {
     creep.say(creep.memory.state);
   }
 
+  const sources = creep.room.find(FIND_SOURCES);
+
   if (constructionSites.length) {
     if (creep.memory.state === "building") {
+      const tooCloseToSource = sources.find(source => source.pos.inRangeTo(creep.pos, 1));
+      if (tooCloseToSource) {
+        creep.moveTo(25, 25);
+        return;
+      }
+
       const target = findNaiveTarget(constructionSites, creep);
 
       if (creep.build(target) == ERR_NOT_IN_RANGE) {
@@ -26,9 +34,21 @@ export const builderTick = (creep: Creep) => {
         creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
       }
     } else {
-      const sources = creep.room.find(FIND_SOURCES);
       const naivestSource = getNaiveSource(sources, creep);
-      if (!naivestSource) return;
+      if (!naivestSource) {
+        // Grab energy from the closest creep with energy
+        const closestCreep = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
+          filter: creep => creep.store[RESOURCE_ENERGY] > 0
+        });
+
+        if (closestCreep && closestCreep.transfer(creep, RESOURCE_ENERGY) !== OK) {
+          creep.moveTo(closestCreep, {
+            visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "harvesting"] }
+          });
+        }
+
+        return;
+      }
 
       if (creep.harvest(naivestSource) == ERR_NOT_IN_RANGE) {
         creep.moveTo(naivestSource, {
