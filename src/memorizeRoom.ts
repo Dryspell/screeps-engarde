@@ -77,9 +77,9 @@ export function memorizeRoom(room: Room) {
   }
 
   if (!Memory.rooms[room.name].spawns?.length && room.find(FIND_MY_SPAWNS).length) {
-    Memory.rooms[room.name].spawns = room
-      .find(FIND_MY_SPAWNS)
-      .map(spawn => memorizeSpawnData(spawn, Memory.rooms[room.name].exits));
+    const exits = getExits(room);
+
+    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits));
   }
 
   if (!Memory.rooms[room.name].sources?.length && room.find(FIND_SOURCES).length) {
@@ -109,7 +109,7 @@ export function memorizeRoom(room: Room) {
       .map(tower => memorizeTowerData(tower as StructureTower));
   }
 
-  if (!Memory.rooms[room.name].exits.length) {
+  if (!Memory.rooms[room.name].exits?.length) {
     Memory.rooms[room.name].exits = getExits(room);
   }
 

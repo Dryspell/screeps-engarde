@@ -40,14 +40,12 @@ export const buildRoadFromPosToSet = (room: Room, pos: RoomPosition, set: RoomPo
 
 export const getExits = (room: Room) => {
   try {
-    return Object.entries(Game.map.describeExits(room.name))
-      .map(([dir, roomName]) => {
-        // console.log(`[${Game.time.toLocaleString()}] Exits: ${dir} - ${roomName}`);
-        const exitDirection = parseInt(dir);
+    return Object.entries(Game.map.describeExits(room.name)).map(([dir, roomName]) => {
+      // console.log(`[${Game.time.toLocaleString()}] Exits: ${dir} - ${roomName}`);
+      const exitDirection = parseInt(dir);
 
-        return { exitDirection, roomName };
-      })
-      .filter(Boolean) as {
+      return { exitDirection, roomName };
+    }) as {
       exitDirection: FIND_EXIT_TOP | FIND_EXIT_RIGHT | FIND_EXIT_BOTTOM | FIND_EXIT_LEFT;
       roomName: string;
     }[];

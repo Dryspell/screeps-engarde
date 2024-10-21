@@ -1,4 +1,5 @@
 import { MAX_ROOM_EXTENSIONS } from "buildings/utils";
+import { flatten } from "lodash";
 import { MemorizedPath } from "main";
 import { memorizeRoom } from "memorizeRoom";
 
@@ -52,9 +53,9 @@ const createRoadsForPaths = (room: Room) => {
     if (spawn.pathToController) {
       visualizePath(room, spawn.pathToController.path);
 
-      if (spawn.pathToController.constructedRoad) return;
-
-      createRoads(room, spawn.pathToController);
+      if (!spawn.pathToController.constructedRoad) {
+        createRoads(room, spawn.pathToController);
+      }
     }
 
     spawn.pathsToMinerals.forEach(pathToMineral => {
@@ -79,28 +80,29 @@ const createRoadsForPaths = (room: Room) => {
 
     visualizePath(room, source.pathToController.path);
 
-    if (source.pathToController && source.pathToController.path?.length) {
+    if (source.pathToController && source.pathToController.path?.length && !source.pathToController.constructedRoad) {
       createRoads(room, source.pathToController);
     }
   });
 };
 
 export const getPlannedRoads = (room: Room) => {
-  return Memory.rooms[room.name].spawns
-    .map(spawn => {
-      return [
-        ...spawn.pathsToSources.map(path => path.path),
-        spawn.pathToController?.path,
-        ...spawn.pathsToMinerals.map(path => path.path),
-        ...spawn.pathsToExits.map(path => path.path)
-      ].filter(Boolean) as PathStep[][];
-    })
-    .flat(2)
-    .concat(
-      (
+  return flatten(
+    flatten(
+      Memory.rooms[room.name].spawns.map(spawn => {
+        return [
+          ...spawn.pathsToSources.map(path => path.path),
+          spawn.pathToController?.path,
+          ...spawn.pathsToMinerals.map(path => path.path),
+          ...spawn.pathsToExits.map(path => path.path)
+        ].filter(Boolean) as PathStep[][];
+      })
+    ).concat(
+      flatten(
         Memory.rooms[room.name].sources.map(source => source.pathToController?.path).filter(Boolean) as PathStep[][]
-      ).flat()
-    );
+      )
+    )
+  );
 };
 
 const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
@@ -186,7 +188,7 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
     filter: { structureType: STRUCTURE_EXTENSION }
   }) as StructureExtension[];
 
-  if (!Memory.rooms[room.name].extensions.length) {
+  if (!Memory.rooms[room.name].extensions?.length) {
     Memory.rooms[room.name].extensions = [
       ...extensions.map(extensions => ({
         id: extensions.id,
@@ -282,6 +284,12 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
           }
         }
       });
+  }
+
+  if (VISUALIZE_EXTENSIONS) {
+    Memory.rooms[room.name].extensions.forEach(extension => {
+      room.visual.circle(extension.pos.x, extension.pos.y, { fill: "transparent", radius: 0.5, stroke: "green" });
+    });
   }
 };
 
