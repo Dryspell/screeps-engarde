@@ -46,7 +46,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
           generateBody(spawn.room.energyAvailable, body).length <
           generateBody(spawn.room.energyCapacityAvailable, body).length
       ) ||
-        sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0) >= creeps.length)
+        creeps.length >= sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0))
     )
       return;
 
