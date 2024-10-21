@@ -43,6 +43,14 @@ const visualizePath = (room: Room, path: PathStep[] | null) => {
 
 const createRoadsForPaths = (room: Room) => {
   Memory.rooms[room.name].spawns.forEach(spawn => {
+    spawn.pathsAroundSpawn.forEach(pathAroundSpawn => {
+      visualizePath(room, pathAroundSpawn.path);
+
+      if (pathAroundSpawn.constructedRoad) return;
+
+      createRoads(room, pathAroundSpawn);
+    });
+
     spawn.pathsToSources.forEach(pathToSource => {
       visualizePath(room, pathToSource.path);
 
@@ -94,7 +102,8 @@ export const getPlannedRoads = (room: Room) => {
           ...spawn.pathsToSources.map(path => path.path),
           spawn.pathToController?.path,
           ...spawn.pathsToMinerals.map(path => path.path),
-          ...spawn.pathsToExits.map(path => path.path)
+          ...spawn.pathsToExits.map(path => path.path),
+          ...spawn.pathsAroundSpawn.map(path => path.path)
         ].filter(Boolean) as PathStep[][];
       })
     ).concat(

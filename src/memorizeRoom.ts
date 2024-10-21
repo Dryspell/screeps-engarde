@@ -28,7 +28,29 @@ const memorizeSpawnData = (spawn: StructureSpawn, exits: ReturnType<typeof getEx
       targetId: mineral.id,
       path: spawn.pos.findPathTo(mineral.pos, { ignoreCreeps: true }),
       constructedRoad: false
-    }))
+    })),
+    pathsAroundSpawn: [
+      {
+        targetId: spawn.id,
+        path: [
+          [-1, -1],
+          [-1, 1],
+          [1, 1],
+          [1, -1]
+        ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+        constructedRoad: false
+      },
+      {
+        targetId: spawn.id,
+        path: [
+          [-1, 0],
+          [0, 1],
+          [1, 0],
+          [0, -1]
+        ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+        constructedRoad: false
+      }
+    ]
   };
 };
 
@@ -80,6 +102,10 @@ export function memorizeRoom(room: Room) {
     const exits = getExits(room);
 
     Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits));
+  }
+
+  if (!Memory.rooms[room.name].spawns.every(spawn => spawn.pathsAroundSpawn)) {
+    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, getExits(room)));
   }
 
   if (!Memory.rooms[room.name].sources?.length && room.find(FIND_SOURCES).length) {

@@ -20,6 +20,7 @@ declare global {
       pathToController: MemorizedPath<StructureController> | null;
       pathsToSources: MemorizedPath<Source>[];
       pathsToMinerals: MemorizedPath<Mineral>[];
+      pathsAroundSpawn: MemorizedPath<StructureSpawn>[];
     }[];
     sources: { id: Id<Source>; pos: RoomPosition; pathToController: MemorizedPath<StructureController> | null }[];
     controller: { id: string; pos: RoomPosition } | undefined;
