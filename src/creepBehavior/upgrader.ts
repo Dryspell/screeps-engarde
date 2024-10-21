@@ -1,7 +1,11 @@
 import { getNaiveSource, PATH_COLORS } from "./utils";
 
 export const upgraderTick = (creep: Creep) => {
-  if (creep.room.energyAvailable < creep.room.energyCapacityAvailable) {
+  if (
+    creep.room.energyAvailable < creep.room.energyCapacityAvailable &&
+    creep.room.controller &&
+    creep.room.controller.level > 1
+  ) {
     creep.memory.role = "harvester";
     creep.say("harvester");
     console.log(`[${creep.name}]: Switching to harvester`);

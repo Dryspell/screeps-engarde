@@ -285,6 +285,7 @@ const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomControlle
     if (VISUALIZE_ONLY) return;
 
     freeSpaceAroundSpawn
+      .sort((spaceA, spaceB) => spawn.pos.getRangeTo(spaceA[0], spaceA[1]) - spawn.pos.getRangeTo(spaceB[0], spaceB[1]))
       .slice(
         constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION).length + extensions.length,
         MAX_ROOM_EXTENSIONS[roomController.level as keyof typeof MAX_ROOM_EXTENSIONS] + 1
@@ -359,8 +360,8 @@ export const architectRoom = (room: Room) => {
     return;
   }
 
-  createRoadsForPaths(room);
   planAndBuildTowers(room, spawn, roomController);
   planAndBuildExtensions(room, spawn, roomController);
+  createRoadsForPaths(room);
   // planAndBuildWalls(room, spawn, roomController);
 };

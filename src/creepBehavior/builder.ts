@@ -24,7 +24,11 @@ export const builderTick = (creep: Creep) => {
         return;
       }
 
-      const target = findNaiveTarget(constructionSites, creep);
+      const target =
+        findNaiveTarget(
+          constructionSites.filter(site => site.structureType === "extension"),
+          creep
+        ) ?? findNaiveTarget(constructionSites, creep);
 
       if (creep.build(target) == ERR_NOT_IN_RANGE) {
         creep.memory.target = target.id;

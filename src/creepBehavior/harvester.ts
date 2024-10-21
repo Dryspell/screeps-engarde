@@ -5,7 +5,8 @@ export const harvesterTick = (creep: Creep) => {
     if (
       creep.room.find(FIND_MY_CONSTRUCTION_SITES).length &&
       creep.room.controller &&
-      creep.room.controller.ticksToDowngrade > 1000
+      creep.room.controller.ticksToDowngrade > 1000 &&
+      creep.room.controller.level > 1
     ) {
       creep.memory.role = "builder";
       creep.say("builder");
@@ -20,7 +21,10 @@ export const harvesterTick = (creep: Creep) => {
     }
   }
 
-  if (creep.store[RESOURCE_ENERGY] === 0) {
+  if (
+    creep.store[RESOURCE_ENERGY] === 0 ||
+    (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+  ) {
     const sources = creep.room.find(FIND_SOURCES);
     const naivestSource = getNaiveSource(sources, creep);
     if (!naivestSource) return;
