@@ -6,14 +6,18 @@ import { ROLES } from "creepBehavior/roles";
 import { getExits } from "buildings/utils";
 import { architectRoom } from "architect";
 
-type MemorizedPath<T extends _HasId> = { targetId: Id<T>; path: PathStep[]; constructedRoad: boolean };
+export type MemorizedPath<T extends _HasId | string> = {
+  targetId: T extends _HasId ? Id<T> : T;
+  path: PathStep[] | null;
+  constructedRoad: boolean;
+};
 
 declare global {
   interface RoomMemory {
     spawns: {
       id: string;
       pos: RoomPosition;
-      pathsToExits: { exitRoom: string; path: PathStep[] | null; constructedRoad: boolean }[];
+      pathsToExits: { targetId: string; path: PathStep[] | null; constructedRoad: boolean }[];
       pathToController: MemorizedPath<StructureController> | null;
       pathsToSources: MemorizedPath<Source>[];
       pathsToMinerals: MemorizedPath<Mineral>[];
@@ -24,7 +28,9 @@ declare global {
     towers: {
       id: string;
       pos: RoomPosition;
+      planned: boolean;
     }[];
+    extensions: { id: string; pos: RoomPosition; planned: boolean }[];
     exits: ReturnType<typeof getExits>;
     containsHostiles: boolean;
   }

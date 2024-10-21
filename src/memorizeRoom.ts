@@ -7,7 +7,7 @@ const memorizeSpawnData = (spawn: StructureSpawn, exits: ReturnType<typeof getEx
     pathsToExits: exits.map(exit => {
       const closestExit = spawn.pos.findClosestByPath(spawn.room.find(exit.exitDirection), { ignoreCreeps: true });
       return {
-        exitRoom: exit.roomName,
+        targetId: exit.roomName,
         path: closestExit && spawn.pos.findPathTo(closestExit, { ignoreCreeps: true }),
         constructedRoad: false
       };
@@ -33,7 +33,7 @@ const memorizeSpawnData = (spawn: StructureSpawn, exits: ReturnType<typeof getEx
 };
 
 function memorizeTowerData(tower: StructureTower) {
-  return { id: tower.id, pos: tower.pos };
+  return { id: tower.id, pos: tower.pos, planned: false };
 }
 
 function memorizeMineralData(mineral: Mineral<MineralConstant>) {
@@ -66,6 +66,7 @@ export function memorizeRoom(room: Room) {
       towers: room
         .find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } })
         .map(tower => memorizeTowerData(tower as StructureTower)),
+      extensions: [],
       containsHostiles: room.find(FIND_HOSTILE_CREEPS).length > 0,
       exits
     };
@@ -85,8 +86,14 @@ export function memorizeRoom(room: Room) {
     Memory.rooms[room.name].controller = memorizeControllerData(room);
   }
 
-  if (!Memory.rooms[room.name].minerals?.length && room.find(FIND_MINERALS).length) {
+  if (
+    (!Memory.rooms[room.name].minerals?.length || !Memory.rooms[room.name].spawns[0].pathsToMinerals.length) &&
+    room.find(FIND_MINERALS).length
+  ) {
+    const exits = getExits(room);
+
     Memory.rooms[room.name].minerals = room.find(FIND_MINERALS).map(mineral => memorizeMineralData(mineral));
+    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits));
   }
 
   if (
@@ -98,7 +105,7 @@ export function memorizeRoom(room: Room) {
       .map(tower => memorizeTowerData(tower as StructureTower));
   }
 
-  if (!Memory.rooms[room.name].exits) {
+  if (!Memory.rooms[room.name].exits.length) {
     Memory.rooms[room.name].exits = getExits(room);
   }
 
