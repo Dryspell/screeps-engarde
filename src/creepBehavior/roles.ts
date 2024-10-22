@@ -1,29 +1,38 @@
-import { builderTick } from "creepBehavior/builder";
+// import { builderTick } from "creepBehavior/builder";
 import { claimerTick } from "creepBehavior/claimer";
-import { harvesterTick } from "creepBehavior/harvester";
+// import { harvesterTick } from "creepBehavior/harvester";
 import { upgraderTick } from "creepBehavior/upgrader";
+import { laborerTick } from "./laborer";
 
 export const ROLES = {
-  harvester: {
-    body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-    max: 4,
-    tick: harvesterTick,
-    spawnCondition: (room: Room) => true
-  },
-  upgrader: {
-    body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-    max: 3,
-    tick: upgraderTick,
-    spawnCondition: (room: Room) => room.controller && room.controller?.level < 8
-  },
-  builder: {
+  // harvester: {
+  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
+  //   max: 4,
+  //   tick: harvesterTick,
+  //   spawnCondition: (room: Room) => true
+  // },
+  // upgrader: {
+  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
+  //   max: 3,
+  //   tick: upgraderTick,
+  //   spawnCondition: (room: Room) => room.controller && room.controller?.level < 8
+  // },
+  // builder: {
+  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
+  //   max: 6,
+  //   tick: builderTick,
+  //   spawnCondition: (room: Room) => true
+  //   // Object.values(Game.rooms).some(
+  //   //   room => room.find(FIND_MY_CONSTRUCTION_SITES).length > 0 || room.find(FIND_MY_SPAWNS).length === 0
+  //   // )
+  // },
+
+  // multirole harvester, upgrader, builder
+  laborer: {
     body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
     max: 6,
-    tick: builderTick,
+    tick: laborerTick,
     spawnCondition: (room: Room) => true
-    // Object.values(Game.rooms).some(
-    //   room => room.find(FIND_MY_CONSTRUCTION_SITES).length > 0 || room.find(FIND_MY_SPAWNS).length === 0
-    // )
   },
   claimer: {
     body: [CLAIM, MOVE] satisfies BodyPartConstant[],

@@ -35,6 +35,8 @@ function memorizePaths(
   minerals: Mineral<MineralConstant>[],
   exits: ReturnType<typeof getExits>
 ) {
+  const terrain = new Room.Terrain(room.name);
+
   return [
     // Paths from Controller to Sources
     ...(controller
@@ -53,7 +55,9 @@ function memorizePaths(
               [-1, 1],
               [1, 1],
               [1, -1]
-            ].map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y })) as PathStep[],
+            ]
+              .map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y }))
+              .filter(step => terrain.get(step.x, step.y) !== TERRAIN_MASK_WALL) as PathStep[],
             constructedRoad: false
           },
           {
@@ -62,7 +66,9 @@ function memorizePaths(
               [0, 1],
               [1, 0],
               [0, -1]
-            ].map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y })) as PathStep[],
+            ]
+              .map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y }))
+              .filter(step => terrain.get(step.x, step.y) !== TERRAIN_MASK_WALL) as PathStep[],
             constructedRoad: false
           }
         ]
@@ -131,7 +137,9 @@ function memorizePaths(
             [-1, 1],
             [1, 1],
             [1, -1]
-          ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+          ]
+            .map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y }))
+            .filter(step => terrain.get(step.x, step.y) !== TERRAIN_MASK_WALL) as PathStep[],
           constructedRoad: false
         },
         {
@@ -140,7 +148,9 @@ function memorizePaths(
             [0, 1],
             [1, 0],
             [0, -1]
-          ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+          ]
+            .map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y }))
+            .filter(step => terrain.get(step.x, step.y) !== TERRAIN_MASK_WALL) as PathStep[],
           constructedRoad: false
         }
       ])
@@ -148,16 +158,18 @@ function memorizePaths(
   ];
 }
 
-export function memorizeRoom(room: Room, refreshMemory = false) {
+export function memorizeRoom(
+  room: Room,
+  refreshMemory = false,
+  spawns = room.find(FIND_MY_SPAWNS),
+  sources = room.find(FIND_SOURCES),
+  controller = room.controller,
+  structures = room.find(FIND_MY_STRUCTURES),
+  minerals = room.find(FIND_MINERALS)
+) {
   if (refreshMemory) {
     console.log(`[${Game.time.toLocaleString()}] Resetting memory for room ${room.name}`);
   }
-
-  const spawns = room.find(FIND_MY_SPAWNS);
-  const sources = room.find(FIND_SOURCES);
-  const controller = room.controller;
-  const minerals = room.find(FIND_MINERALS);
-  const structures = room.find(FIND_MY_STRUCTURES);
 
   if (!Memory.rooms[room.name] || refreshMemory) {
     const exits = getExits(room);

@@ -4,6 +4,7 @@ import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits } from "buildings/utils";
 import { architectRoom } from "architect";
+import { getUnplannedStructures } from "creepBehavior/laborer";
 
 declare global {
   interface RoomMemory {
@@ -60,15 +61,40 @@ export const loop = ErrorMapper.wrapLoop(() => {
   }
 
   controlledRooms.forEach(room => {
-    architectRoom(room);
+    const sources = room.find(FIND_SOURCES);
+    const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
+    const droppedResources = room.find(FIND_DROPPED_RESOURCES, {
+      filter: resource => resource.resourceType === RESOURCE_ENERGY
+    });
+    const structures = room.find(FIND_MY_STRUCTURES);
+
+    architectRoom(room, sources, constructionSites, structures);
+
+    const ruins = room.find(FIND_RUINS);
+    const tombstones = room.find(FIND_TOMBSTONES);
+    const unplannedStructures = getUnplannedStructures(room, structures);
+
+    creeps
+      .filter(creep => creep.room.name === room.name)
+      .forEach(creep => {
+        if (!ROLES[creep.memory.role]) {
+          creep.memory.role = "laborer";
+        }
+
+        ROLES[creep.memory.role].tick(
+          creep,
+          sources,
+          constructionSites,
+          droppedResources,
+          structures,
+          ruins,
+          tombstones,
+          unplannedStructures
+        );
+      });
   });
 
   handleSpawning(spawns, creeps);
-
-  creeps.forEach(creep => {
-    // console.log(`Creep: ${creep.name} - Role: ${creep.memory.role}`);
-    ROLES[creep.memory.role].tick(creep);
-  });
 
   towerBehavior(controlledRooms);
 

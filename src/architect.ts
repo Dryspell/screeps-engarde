@@ -54,10 +54,14 @@ export const getPlannedRoadsSteps = (room: Room) => {
 
 const MAX_TOWERS_IN_ROOM = 5;
 
-const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
-  const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
-  const towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[];
-
+const planAndBuildTowers = (
+  room: Room,
+  spawns: StructureSpawn[],
+  roomController: StructureController,
+  sources: Source[] = room.find(FIND_SOURCES),
+  constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
+  towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[]
+) => {
   if (!Memory.rooms[room.name].towers || Memory.rooms[room.name].towers?.length < MAX_TOWERS_IN_ROOM) {
     Memory.rooms[room.name].towers = [
       ...towers.map(tower => ({
@@ -77,7 +81,7 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
 
   // Build a tower near the centroid of the spawner, controller and sources
   if (Memory.rooms[room.name].towers.length < MAX_TOWERS_IN_ROOM) {
-    const referenceStructures = [roomController, ...room.find(FIND_SOURCES), spawn];
+    const referenceStructures = [roomController, ...sources, ...spawns];
     const centroid = referenceStructures
       .reduce((acc, structure) => [acc[0] + structure.pos.x, acc[1] + structure.pos.y] as [x: number, y: number], [
         0, 0
@@ -114,7 +118,10 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
 
     const freeSpaceAroundCentroid = spaceAroundCentroid
       .filter(([x, y]) => !structuresAroundCentroid.some(lookObject => lookObject.x === x && lookObject.y === y))
-      .sort((spaceA, spaceB) => spawn.pos.getRangeTo(spaceA[0], spaceA[1]) - spawn.pos.getRangeTo(spaceB[0], spaceB[1]))
+      .sort(
+        (spaceA, spaceB) =>
+          spawns[0].pos.getRangeTo(spaceA[0], spaceA[1]) - spawns[0].pos.getRangeTo(spaceB[0], spaceB[1])
+      )
       .slice(
         0,
         1 //MAX_TOWERS_IN_ROOM
@@ -181,12 +188,16 @@ export const getExistingExtensions = (
   ]);
 };
 
-export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {
-  const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
-  const extensions = room.find(FIND_MY_STRUCTURES, {
+export const planAndBuildExtensions = (
+  room: Room,
+  spawns: StructureSpawn[],
+  roomController: StructureController,
+  constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
+  extensions = room.find(FIND_MY_STRUCTURES, {
     filter: { structureType: STRUCTURE_EXTENSION }
-  }) as StructureExtension[];
-
+  }) as StructureExtension[],
+  plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }))
+) => {
   // console.log(`[${Game.time.toLocaleString()}] Room ${room.name} has ${extensions.length} extensions`);
 
   if (!Memory.rooms[room.name].extensions?.length || !extensions.length) {
@@ -197,19 +208,17 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
     const roomExtensionSpace = Math.ceil(Math.sqrt(MAX_ROOM_EXTENSIONS[8])) + 1;
 
     const spaceAroundSpawn = Array.from({ length: roomExtensionSpace ** 2 }, (_, i) => i).map(i => {
-      const x = spawn.pos.x + (i % roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
-      const y = spawn.pos.y + Math.floor(i / roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
+      const x = spawns[0].pos.x + (i % roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
+      const y = spawns[0].pos.y + Math.floor(i / roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
       return [x, y] as [x: number, y: number];
     });
 
-    const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
-
     const structuresAroundSpawn = room
       .lookAtArea(
-        spawn.pos.y - Math.floor(roomExtensionSpace / 2),
-        spawn.pos.x - Math.floor(roomExtensionSpace / 2),
-        spawn.pos.y + Math.floor(roomExtensionSpace / 2),
-        spawn.pos.x + Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.y - Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.x - Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.y + Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.x + Math.floor(roomExtensionSpace / 2),
         true
       )
       .filter(
@@ -252,7 +261,10 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
     if (VISUALIZE_ONLY) return;
 
     freeSpaceAroundSpawn
-      .sort((spaceA, spaceB) => spawn.pos.getRangeTo(spaceA[0], spaceA[1]) - spawn.pos.getRangeTo(spaceB[0], spaceB[1]))
+      .sort(
+        (spaceA, spaceB) =>
+          spawns[0].pos.getRangeTo(spaceA[0], spaceA[1]) - spawns[0].pos.getRangeTo(spaceB[0], spaceB[1])
+      )
       .slice(
         constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION).length + extensions.length,
         MAX_ROOM_EXTENSIONS[roomController.level as keyof typeof MAX_ROOM_EXTENSIONS] + 1
@@ -305,30 +317,51 @@ function constructSpawn(room: Room, roomController: StructureController, roomSou
 
 const planAndBuildWalls = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {};
 
-export const architectRoom = (room: Room) => {
-  memorizeRoom(room, Game.time % 100 === 0);
-
+export const architectRoom = (
+  room: Room,
+  sources = room.find(FIND_SOURCES),
+  constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
+  structures = room.find(FIND_MY_STRUCTURES),
+) => {
+  const spawns = room.find(FIND_MY_SPAWNS);
   const roomController = room.controller;
+
+  memorizeRoom(room, Game.time % 100 === 0, spawns, sources, roomController, structures);
+
   if (!roomController) {
     return;
   }
 
-  const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
-  const roomSources = room.find(FIND_SOURCES);
-  const spawn = room.find(FIND_MY_SPAWNS)[0];
-
-  if (!spawn && room.controller && !constructionSites.filter(site => site.structureType === STRUCTURE_SPAWN).length) {
+  if (
+    !spawns.length &&
+    room.controller &&
+    room.controller.my &&
+    !constructionSites.filter(site => site.structureType === STRUCTURE_SPAWN).length
+  ) {
     // If there is no spawn and no spawn construction site, create a spawn construction site at the centroid of the sources and controller
 
-    constructSpawn(room, roomController, roomSources);
-  }
-
-  if (!spawn) {
+    constructSpawn(room, roomController, sources);
     return;
   }
 
-  planAndBuildTowers(room, spawn, roomController);
-  planAndBuildExtensions(room, spawn, roomController);
+  const plannedRoads = getPlannedRoadsSteps(room);
+
+  planAndBuildTowers(
+    room,
+    spawns,
+    roomController,
+    sources,
+    constructionSites,
+    structures.filter(structure => structure.structureType === STRUCTURE_TOWER) as StructureTower[]
+  );
+  planAndBuildExtensions(
+    room,
+    spawns,
+    roomController,
+    constructionSites,
+    structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION) as StructureExtension[],
+    plannedRoads
+  );
   createRoadsForPaths(room);
   // planAndBuildWalls(room, spawn, roomController);
 };
