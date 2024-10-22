@@ -1,9 +1,17 @@
 import { getExits } from "buildings/utils";
 import { findNaiveTarget, getNaiveSource, PATH_COLORS } from "./utils";
 import { upgraderTick } from "./upgrader";
-import { getExistingExtensions, getPlannedRoads } from "architect";
+import { getExistingExtensions, getPlannedRoadsSteps } from "architect";
 
 export const builderTick = (creep: Creep) => {
+  if (creep.room.energyAvailable < creep.room.energyCapacityAvailable) {
+    creep.memory.role = "harvester";
+    creep.say("harvester");
+    console.log(`[${creep.name}]: Switching to harvester`);
+
+    return;
+  }
+
   const constructionSites = creep.room.find(FIND_CONSTRUCTION_SITES);
 
   if (creep.memory.state === "building" && creep.store[RESOURCE_ENERGY] == 0) {
@@ -71,7 +79,7 @@ export const builderTick = (creep: Creep) => {
       .filter(struct => struct.planned === true)
       .map(extension => `${extension.pos.x}_${extension.pos.y}`);
 
-    const plannedRoads = getPlannedRoads(creep.room).map(road => `${road.x}_${road.y}`);
+    const plannedRoads = getPlannedRoadsSteps(creep.room).map(road => `${road.x}_${road.y}`);
 
     if (plannedExtensions.some(extension => plannedRoads.includes(extension))) {
       console.log(`Unexpected overlap between planned extensions and roads`);

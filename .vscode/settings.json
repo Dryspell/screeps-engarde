@@ -27,6 +27,10 @@
     "eslint.enable": true,
     "cSpell.words": [
       "Bodyparts",
+      "Buildable",
+      "estree",
+      "pserver",
+      "screeps",
       "upgrader"
     ]
 }

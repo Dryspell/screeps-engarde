@@ -1,6 +1,5 @@
 import { MAX_ROOM_EXTENSIONS } from "buildings/utils";
 import { flatten } from "lodash";
-import { MemorizedPath } from "main";
 import { memorizeRoom } from "memorizeRoom";
 
 const VISUALIZE_PATHS = true;
@@ -8,13 +7,13 @@ const VISUALIZE_EXTENSIONS = true;
 const VISUALIZE_TOWERS = true;
 const VISUALIZE_ONLY = false;
 
-const createRoads = <T extends _HasId | string>(room: Room, memorizedPath: MemorizedPath<T>) => {
+const createRoads = (room: Room, memorizedPath: RoomMemory["paths"][number], omitEnd = true) => {
   if (VISUALIZE_ONLY) return;
 
   if (!memorizedPath.path) return [];
 
   const roadResults = memorizedPath.path.map((pathStep, i, path) => {
-    if (i < path.length - 1) {
+    if (i < (omitEnd ? path.length - 1 : path.length)) {
       return room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD);
     } else return OK;
   });
@@ -42,76 +41,15 @@ const visualizePath = (room: Room, path: PathStep[] | null) => {
 };
 
 const createRoadsForPaths = (room: Room) => {
-  Memory.rooms[room.name].spawns.forEach(spawn => {
-    spawn.pathsAroundSpawn.forEach(pathAroundSpawn => {
-      visualizePath(room, pathAroundSpawn.path);
+  Memory.rooms[room.name].paths.forEach(memorizedPath => {
+    visualizePath(room, memorizedPath.path);
 
-      if (pathAroundSpawn.constructedRoad) return;
-
-      createRoads(room, pathAroundSpawn);
-    });
-
-    spawn.pathsToSources.forEach(pathToSource => {
-      visualizePath(room, pathToSource.path);
-
-      if (pathToSource.constructedRoad) return;
-      createRoads(room, pathToSource);
-    });
-
-    if (spawn.pathToController) {
-      visualizePath(room, spawn.pathToController.path);
-
-      if (!spawn.pathToController.constructedRoad) {
-        createRoads(room, spawn.pathToController);
-      }
-    }
-
-    spawn.pathsToMinerals.forEach(pathToMineral => {
-      visualizePath(room, pathToMineral.path);
-
-      if (pathToMineral.constructedRoad) return;
-
-      createRoads(room, pathToMineral);
-    });
-
-    spawn.pathsToExits.forEach(pathToExit => {
-      visualizePath(room, pathToExit.path);
-
-      if (pathToExit.constructedRoad) return;
-
-      createRoads(room, pathToExit);
-    });
-  });
-
-  Memory.rooms[room.name].sources.forEach(source => {
-    if (!source.pathToController) return;
-
-    visualizePath(room, source.pathToController.path);
-
-    if (source.pathToController && source.pathToController.path?.length && !source.pathToController.constructedRoad) {
-      createRoads(room, source.pathToController);
-    }
+    createRoads(room, memorizedPath);
   });
 };
 
-export const getPlannedRoads = (room: Room) => {
-  return flatten(
-    flatten(
-      Memory.rooms[room.name].spawns.map(spawn => {
-        return [
-          ...spawn.pathsToSources.map(path => path.path),
-          spawn.pathToController?.path,
-          ...spawn.pathsToMinerals.map(path => path.path),
-          ...spawn.pathsToExits.map(path => path.path),
-          ...spawn.pathsAroundSpawn.map(path => path.path)
-        ].filter(Boolean) as PathStep[][];
-      })
-    ).concat(
-      flatten(
-        Memory.rooms[room.name].sources.map(source => source.pathToController?.path).filter(Boolean) as PathStep[][]
-      )
-    )
-  );
+export const getPlannedRoadsSteps = (room: Room) => {
+  return flatten(Memory.rooms[room.name].paths.map(memorizedPath => memorizedPath.path));
 };
 
 const MAX_TOWERS_IN_ROOM = 5;
@@ -154,7 +92,7 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
       return [x, y] as [x: number, y: number];
     });
 
-    const plannedRoads = getPlannedRoads(room).map(({ x, y }) => ({ x, y }));
+    const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
 
     const structuresAroundCentroid = room
       .lookAtArea(
@@ -177,7 +115,10 @@ const planAndBuildTowers = (room: Room, spawn: StructureSpawn, roomController: S
     const freeSpaceAroundCentroid = spaceAroundCentroid
       .filter(([x, y]) => !structuresAroundCentroid.some(lookObject => lookObject.x === x && lookObject.y === y))
       .sort((spaceA, spaceB) => spawn.pos.getRangeTo(spaceA[0], spaceA[1]) - spawn.pos.getRangeTo(spaceB[0], spaceB[1]))
-      .slice(0, MAX_TOWERS_IN_ROOM);
+      .slice(
+        0,
+        1 //MAX_TOWERS_IN_ROOM
+      );
 
     freeSpaceAroundCentroid.forEach(([x, y]) => {
       if (!Memory.rooms[room.name].towers.some(tower => tower.pos.x === x && tower.pos.y === y)) {
@@ -246,7 +187,9 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
     filter: { structureType: STRUCTURE_EXTENSION }
   }) as StructureExtension[];
 
-  if (!Memory.rooms[room.name].extensions?.length) {
+  // console.log(`[${Game.time.toLocaleString()}] Room ${room.name} has ${extensions.length} extensions`);
+
+  if (!Memory.rooms[room.name].extensions?.length || !extensions.length) {
     Memory.rooms[room.name].extensions = getExistingExtensions(room, constructionSites, extensions);
   }
 
@@ -259,7 +202,7 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
       return [x, y] as [x: number, y: number];
     });
 
-    const plannedRoads = getPlannedRoads(room).map(({ x, y }) => ({ x, y }));
+    const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
 
     const structuresAroundSpawn = room
       .lookAtArea(
@@ -273,7 +216,8 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
         lookResult =>
           lookResult.type !== "creep" &&
           lookResult.type !== "tombstone" &&
-          !(lookResult.type === "terrain" && (lookResult.terrain === "swamp" || lookResult.terrain === "plain"))
+          !(lookResult.type === "terrain" && (lookResult.terrain === "swamp" || lookResult.terrain === "plain")) &&
+          lookResult.type !== "ruin"
       )
       .map(({ x, y }) => ({ x, y }))
       .concat(constructionSites.map(({ pos }) => ({ x: pos.x, y: pos.y })))
@@ -284,11 +228,15 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
       ([x, y]) => !structuresAroundSpawn.some(lookObject => lookObject.x === x && lookObject.y === y)
     );
 
+    // console.log(
+    //   `[${Game.time.toLocaleString()}] Room ${room.name} has ${freeSpaceAroundSpawn.length} free spaces for extensions`
+    // );
+
     // Memorize the free space around the spawn as planned extensions
     freeSpaceAroundSpawn.forEach(([x, y]) => {
       if (!Memory.rooms[room.name].extensions.some(extension => extension.pos.x === x && extension.pos.y === y)) {
         Memory.rooms[room.name].extensions.push({
-          id: "",
+          id: extensions.find(extension => extension.pos.x === x && extension.pos.y === y)?.id ?? "",
           pos: new RoomPosition(x, y, room.name),
           planned: true
         });
@@ -320,10 +268,10 @@ export const planAndBuildExtensions = (room: Room, spawn: StructureSpawn, roomCo
             extension => extension.pos.x === x && extension.pos.y === y
           );
           if (existingMemorizedExtension) {
-            existingMemorizedExtension.planned = false;
+            existingMemorizedExtension.planned = true;
           } else {
             Memory.rooms[room.name].extensions.push({
-              id: "",
+              id: extensions.find(extension => extension.pos.x === x && extension.pos.y === y)?.id ?? "",
               pos: new RoomPosition(x, y, room.name),
               planned: true
             });
@@ -358,7 +306,7 @@ function constructSpawn(room: Room, roomController: StructureController, roomSou
 const planAndBuildWalls = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {};
 
 export const architectRoom = (room: Room) => {
-  memorizeRoom(room);
+  memorizeRoom(room, Game.time % 100 === 0);
 
   const roomController = room.controller;
   if (!roomController) {

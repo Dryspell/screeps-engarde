@@ -5,24 +5,13 @@ import { ROLES } from "creepBehavior/roles";
 import { getExits } from "buildings/utils";
 import { architectRoom } from "architect";
 
-export type MemorizedPath<T extends _HasId | string> = {
-  targetId: T extends _HasId ? Id<T> : T;
-  path: PathStep[] | null;
-  constructedRoad: boolean;
-};
-
 declare global {
   interface RoomMemory {
     spawns: {
       id: string;
       pos: RoomPosition;
-      pathsToExits: { targetId: string; path: PathStep[] | null; constructedRoad: boolean }[];
-      pathToController: MemorizedPath<StructureController> | null;
-      pathsToSources: MemorizedPath<Source>[];
-      pathsToMinerals: MemorizedPath<Mineral>[];
-      pathsAroundSpawn: MemorizedPath<StructureSpawn>[];
     }[];
-    sources: { id: Id<Source>; pos: RoomPosition; pathToController: MemorizedPath<StructureController> | null }[];
+    sources: { id: Id<Source>; pos: RoomPosition }[];
     controller: { id: string; pos: RoomPosition } | undefined;
     minerals: { id: Id<Mineral>; pos: RoomPosition }[];
     towers: {
@@ -33,6 +22,8 @@ declare global {
     extensions: { id: string; pos: RoomPosition; planned: boolean }[];
     exits: ReturnType<typeof getExits>;
     containsHostiles: boolean;
+    paths: { path: PathStep[]; constructedRoad: boolean }[];
+    lastMemorizedTick: typeof Game.time;
   }
 
   interface Memory {

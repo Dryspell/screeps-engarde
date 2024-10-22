@@ -50,6 +50,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
           generateBody(spawn.room.energyCapacityAvailable, body).length
       )
     ) {
+      // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Not enough energy to spawn max body`);
       return;
     }
 
@@ -57,6 +58,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       creeps.filter(creep => creep.room.name === spawn.room.name).length >=
       sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)
     ) {
+      // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Too many creeps to spawn another`);
       return;
     }
 

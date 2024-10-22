@@ -1,56 +1,10 @@
 import { getExits } from "buildings/utils";
+import { flatten } from "lodash";
 
 const memorizeSpawnData = (spawn: StructureSpawn, exits: ReturnType<typeof getExits>) => {
   return {
     id: spawn.id,
-    pos: spawn.pos,
-    pathsToExits: exits.map(exit => {
-      const closestExit = spawn.pos.findClosestByPath(spawn.room.find(exit.exitDirection), { ignoreCreeps: true });
-      return {
-        targetId: exit.roomName,
-        path: closestExit && spawn.pos.findPathTo(closestExit, { ignoreCreeps: true }),
-        constructedRoad: false
-      };
-    }),
-    pathToController: spawn.room.controller
-      ? {
-          targetId: spawn.room.controller.id,
-          path: spawn.pos.findPathTo(spawn.room.controller.pos, { ignoreCreeps: true }),
-          constructedRoad: false
-        }
-      : null,
-    pathsToSources: spawn.room.find(FIND_SOURCES).map(source => ({
-      targetId: source.id,
-      path: spawn.pos.findPathTo(source.pos, { ignoreCreeps: true }),
-      constructedRoad: false
-    })),
-    pathsToMinerals: spawn.room.find(FIND_MINERALS).map(mineral => ({
-      targetId: mineral.id,
-      path: spawn.pos.findPathTo(mineral.pos, { ignoreCreeps: true }),
-      constructedRoad: false
-    })),
-    pathsAroundSpawn: [
-      {
-        targetId: spawn.id,
-        path: [
-          [-1, -1],
-          [-1, 1],
-          [1, 1],
-          [1, -1]
-        ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
-        constructedRoad: false
-      },
-      {
-        targetId: spawn.id,
-        path: [
-          [-1, 0],
-          [0, 1],
-          [1, 0],
-          [0, -1]
-        ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
-        constructedRoad: false
-      }
-    ]
+    pos: spawn.pos
   };
 };
 
@@ -69,74 +23,159 @@ function memorizeControllerData(room: Room) {
 function memorizeSourceData(source: Source) {
   return {
     id: source.id,
-    pos: source.pos,
-    pathToController: source.room.controller
-      ? {
-          targetId: source.room.controller.id,
-          path: source.pos.findPathTo(source.room.controller.pos, { ignoreCreeps: true }),
-          constructedRoad: false
-        }
-      : null
+    pos: source.pos
   };
 }
 
-export function memorizeRoom(room: Room) {
-  if (!Memory.rooms[room.name]) {
+function memorizePaths(
+  room: Room,
+  spawns: StructureSpawn[],
+  controller: StructureController | undefined,
+  sources: Source[],
+  minerals: Mineral<MineralConstant>[],
+  exits: ReturnType<typeof getExits>
+) {
+  return [
+    // Paths from Controller to Sources
+    ...(controller
+      ? sources.map(source => ({
+          path: source.pos.findPathTo(controller.pos, { ignoreCreeps: true }),
+          constructedRoad: false
+        }))
+      : []),
+
+    // Paths around Controller
+    ...(controller
+      ? [
+          {
+            path: [
+              [-1, -1],
+              [-1, 1],
+              [1, 1],
+              [1, -1]
+            ].map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y })) as PathStep[],
+            constructedRoad: false
+          },
+          {
+            path: [
+              [-1, 0],
+              [0, 1],
+              [1, 0],
+              [0, -1]
+            ].map(([x, y]) => ({ dx: x, dy: y, x: controller.pos.x + x, y: controller.pos.y + y })) as PathStep[],
+            constructedRoad: false
+          }
+        ]
+      : []),
+
+    // Paths from Controller to Exits
+    ...(controller
+      ? exits.map(exit => {
+          const closestExit = controller.pos.findClosestByPath(controller.room.find(exit.exitDirection), {
+            ignoreCreeps: true
+          });
+          return {
+            path: closestExit ? controller.pos.findPathTo(closestExit, { ignoreCreeps: true }) : [],
+            constructedRoad: false
+          };
+        })
+      : []),
+
+    //Paths from Spawns to Exits
+    ...flatten(
+      spawns.map(spawn =>
+        exits.map(exit => {
+          const closestExit = spawn.pos.findClosestByPath(spawn.room.find(exit.exitDirection), { ignoreCreeps: true });
+          return {
+            path: closestExit ? spawn.pos.findPathTo(closestExit, { ignoreCreeps: true }) : [],
+            constructedRoad: false
+          };
+        })
+      )
+    ),
+
+    // Paths from Spawns to Controller
+    ...(controller
+      ? spawns.map(spawn => ({
+          path: spawn.pos.findPathTo(controller.pos, { ignoreCreeps: true }),
+          constructedRoad: false
+        }))
+      : []),
+
+    // Paths from Spawns to Sources
+    ...flatten(
+      spawns.map(spawn =>
+        sources.map(source => ({
+          path: spawn.pos.findPathTo(source.pos, { ignoreCreeps: true }),
+          constructedRoad: false
+        }))
+      )
+    ),
+
+    // Paths from Spawns to Minerals
+    ...flatten(
+      spawns.map(spawn =>
+        minerals.map(mineral => ({
+          path: spawn.pos.findPathTo(mineral.pos, { ignoreCreeps: true }),
+          constructedRoad: false
+        }))
+      )
+    ),
+
+    // Paths around Spawns
+    ...flatten(
+      spawns.map(spawn => [
+        {
+          path: [
+            [-1, -1],
+            [-1, 1],
+            [1, 1],
+            [1, -1]
+          ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+          constructedRoad: false
+        },
+        {
+          path: [
+            [-1, 0],
+            [0, 1],
+            [1, 0],
+            [0, -1]
+          ].map(([x, y]) => ({ dx: x, dy: y, x: spawn.pos.x + x, y: spawn.pos.y + y })) as PathStep[],
+          constructedRoad: false
+        }
+      ])
+    )
+  ];
+}
+
+export function memorizeRoom(room: Room, refreshMemory = false) {
+  if (refreshMemory) {
+    console.log(`[${Game.time.toLocaleString()}] Resetting memory for room ${room.name}`);
+  }
+
+  const spawns = room.find(FIND_MY_SPAWNS);
+  const sources = room.find(FIND_SOURCES);
+  const controller = room.controller;
+  const minerals = room.find(FIND_MINERALS);
+  const structures = room.find(FIND_MY_STRUCTURES);
+
+  if (!Memory.rooms[room.name] || refreshMemory) {
     const exits = getExits(room);
 
     Memory.rooms[room.name] = {
-      spawns: room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits)),
-      sources: room.find(FIND_SOURCES).map(source => memorizeSourceData(source)),
+      spawns: spawns.map(spawn => memorizeSpawnData(spawn, exits)),
+      sources: sources.map(source => memorizeSourceData(source)),
       controller: memorizeControllerData(room),
-      minerals: room.find(FIND_MINERALS).map(mineral => memorizeMineralData(mineral)),
-      towers: room
-        .find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } })
+      minerals: minerals.map(mineral => memorizeMineralData(mineral)),
+      towers: structures
+        .filter(structure => structure.structureType === STRUCTURE_TOWER)
         .map(tower => memorizeTowerData(tower as StructureTower)),
       extensions: [],
       containsHostiles: room.find(FIND_HOSTILE_CREEPS).length > 0,
-      exits
+      exits,
+      paths: memorizePaths(room, spawns, controller, sources, minerals, exits),
+      lastMemorizedTick: Game.time
     };
-  }
-
-  if (!Memory.rooms[room.name].spawns?.length && room.find(FIND_MY_SPAWNS).length) {
-    const exits = getExits(room);
-
-    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits));
-  }
-
-  if (!Memory.rooms[room.name].spawns.every(spawn => spawn.pathsAroundSpawn)) {
-    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, getExits(room)));
-  }
-
-  if (!Memory.rooms[room.name].sources?.length && room.find(FIND_SOURCES).length) {
-    Memory.rooms[room.name].sources = room.find(FIND_SOURCES).map(source => memorizeSourceData(source));
-  }
-
-  if (!Memory.rooms[room.name].controller && room.controller) {
-    Memory.rooms[room.name].controller = memorizeControllerData(room);
-  }
-
-  if (
-    (!Memory.rooms[room.name].minerals?.length || !Memory.rooms[room.name].spawns[0].pathsToMinerals.length) &&
-    room.find(FIND_MINERALS).length
-  ) {
-    const exits = getExits(room);
-
-    Memory.rooms[room.name].minerals = room.find(FIND_MINERALS).map(mineral => memorizeMineralData(mineral));
-    Memory.rooms[room.name].spawns = room.find(FIND_MY_SPAWNS).map(spawn => memorizeSpawnData(spawn, exits));
-  }
-
-  if (
-    !Memory.rooms[room.name].towers?.length &&
-    room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }).length
-  ) {
-    Memory.rooms[room.name].towers = room
-      .find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } })
-      .map(tower => memorizeTowerData(tower as StructureTower));
-  }
-
-  if (!Memory.rooms[room.name].exits?.length) {
-    Memory.rooms[room.name].exits = getExits(room);
   }
 
   if (room.find(FIND_HOSTILE_CREEPS).length > 0) {
