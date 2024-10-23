@@ -170,7 +170,7 @@ function profileObjectFunctions(object, label) {
   return objectToWrap;
 }
 
-function profileFunction(fn, functionName) {
+export function profileFunction<T>(fn: T, functionName: string): T {
   const fnName = functionName || fn.name;
   if (!fnName) {
     console.log("Couldn't find a function name for - ", fn);
@@ -343,5 +343,4 @@ export function enable() {
 // output: Profiler.output,
 
 // registerObject: profileObjectFunctions,
-// registerFN: profileFunction,
 // registerClass: profileObjectFunctions

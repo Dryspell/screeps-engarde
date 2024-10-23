@@ -1,3 +1,5 @@
+import { profileFunction } from "utils/screeps-profiler";
+
 export const PATH_COLORS = {
   harvesting: "#ffaa00",
   transferring: "#ffffff",
@@ -12,7 +14,45 @@ export type EnergyTarget =
   | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
   | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin };
 
-const getSafeEnergyStores = (energyStores: EnergyTarget[]) => {
+export const getEnergyTargets = profileFunction(
+  (
+    droppedResources: Resource<ResourceConstant>[],
+    structures: AnyOwnedStructure[],
+    ruins: Ruin[],
+    tombstones: Tombstone[],
+    sources: Source[]
+  ) => {
+    const energyTargets = [
+      // ...sources.map(source => ({ type: "harvest" as const, base: source })),
+      ...droppedResources
+        .filter(resource => resource.amount > 25)
+        .map(resource => ({ type: "pickup", base: resource } as { type: "pickup"; base: Resource<RESOURCE_ENERGY> })),
+      ...(
+        structures.filter(
+          struct =>
+            // @ts-ignore
+            struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE
+        ) as (StructureContainer | StructureStorage)[]
+      ).map(
+        container =>
+          ({ type: "withdraw", base: container } as {
+            type: "withdraw";
+            base: StructureContainer | StructureStorage;
+          })
+      ),
+      ...ruins.map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
+      ...tombstones.map(tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone }))
+    ] as EnergyTarget[];
+
+    if (!energyTargets.length) {
+      energyTargets.push(...sources.map(source => ({ type: "harvest" as const, base: source })));
+    }
+    return energyTargets;
+  },
+  "getEnergyTargets"
+);
+
+const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
   return energyStores.filter(energyStore => {
     return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
       ? energyStore.base.energy > 25
@@ -20,23 +60,51 @@ const getSafeEnergyStores = (energyStores: EnergyTarget[]) => {
       ? energyStore.base.store[RESOURCE_ENERGY] > 0
       : true;
   });
-};
+}, "getSafeEnergyStores");
 
-export const getNaiveSources = (energyStores: EnergyTarget[], creep: Creep) => {
+const cachePathLength = profileFunction((sourcePos: _HasRoomPosition, store: EnergyTarget) => {
+  if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
+    return 0;
+  }
+
+  const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
+  if (!Memory.cachedPaths) {
+    Memory.cachedPaths = {};
+  }
+  if (!Memory.cachedPaths[concatenatedPosition]) {
+    Memory.cachedPaths[concatenatedPosition] = [];
+  }
+  if (!Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x]) {
+    Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] = [];
+  }
+  if (!Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
+    const path = store.base.pos.findPathTo(sourcePos.pos, { ignoreCreeps: true });
+    path.forEach((step, i) => {
+      if (!Memory.cachedPaths[concatenatedPosition][step.x]) {
+        Memory.cachedPaths[concatenatedPosition][step.x] = [];
+      }
+
+      Memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
+    });
+    return path.length;
+  }
+
+  return Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
+}, "cachePathLength");
+
+export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
   const sortedEnergyStores = getSafeEnergyStores(energyStores)
     .map(store => ({
       ...store,
-      path: creep.pos.findPathTo(store.base),
-      validPath: creep.pos.findClosestByPath([store.base])
+      pathLength: cachePathLength(creep, store)
     }))
-    .filter(store => store.validPath !== null)
-    .sort((a, b) => a.path.length - b.path.length);
+    .sort((a, b) => a.pathLength - b.pathLength);
 
   return sortedEnergyStores;
-};
+}, "getNaiveSources");
 
-export const findNaiveConstructionSite = (constructionSites: ConstructionSite[], creep: Creep) => {
+export const findNaiveConstructionSite = profileFunction((constructionSites: ConstructionSite[], creep: Creep) => {
   const sitesByType = constructionSites.reduce((acc, site) => {
     if (!acc[site.structureType]) {
       acc[site.structureType] = [];
@@ -55,9 +123,9 @@ export const findNaiveConstructionSite = (constructionSites: ConstructionSite[],
   } else {
     return creep.pos.findClosestByPath(constructionSites) ?? constructionSites[0];
   }
-};
+}, "findNaiveConstructionSite");
 
-export const getNaiveTransferTarget = (creep: Creep) => {
+export const getNaiveTransferTarget = profileFunction((creep: Creep) => {
   const targets = creep.room.find(FIND_STRUCTURES, {
     filter: structure => {
       return (
@@ -70,4 +138,4 @@ export const getNaiveTransferTarget = (creep: Creep) => {
   });
 
   return creep.pos.findClosestByPath(targets) as StructureExtension | StructureSpawn;
-};
+}, "getNaiveTransferTarget");

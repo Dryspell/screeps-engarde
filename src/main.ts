@@ -6,7 +6,7 @@ import { getExits } from "buildings/utils";
 import { architectRoom } from "architect";
 import { getUnplannedStructures } from "creepBehavior/laborer";
 import { kmeans } from "spatial-utils";
-import { EnergyTarget } from "creepBehavior/utils";
+import { EnergyTarget, getEnergyTargets } from "creepBehavior/utils";
 import { enable as enableProfiler, wrap as profilerWrap } from "utils/screeps-profiler";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
@@ -38,6 +38,7 @@ declare global {
     uuid: number;
     log: any;
     rooms: { [roomName: string]: RoomMemory };
+    cachedPaths: { [sourcePos: string]: number[][] };
   }
 
   interface CreepMemory {
@@ -64,8 +65,8 @@ export const loop = ErrorMapper.wrapLoop(() =>
   profilerWrap(() => {
     // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
 
-    if (Game.cpu.bucket < 3000) {
-      console.log(`Bucket is low: ${Game.cpu.bucket}`);
+    if (Game.cpu.bucket < 100) {
+      Game.time % 20 === 0 && console.log(`Bucket is low: ${Game.cpu.bucket}`);
       return;
     }
 
@@ -105,31 +106,7 @@ export const loop = ErrorMapper.wrapLoop(() =>
         unplannedStructures
       );
 
-      const energyTargets = [
-        // ...sources.map(source => ({ type: "harvest" as const, base: source })),
-        ...droppedResources
-          .filter(resource => resource.amount > 25)
-          .map(resource => ({ type: "pickup", base: resource } as { type: "pickup"; base: Resource<RESOURCE_ENERGY> })),
-        ...(
-          structures.filter(
-            struct =>
-              // @ts-ignore
-              struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE
-          ) as (StructureContainer | StructureStorage)[]
-        ).map(
-          container =>
-            ({ type: "withdraw", base: container } as {
-              type: "withdraw";
-              base: StructureContainer | StructureStorage;
-            })
-        ),
-        ...ruins.map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
-        ...tombstones.map(tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone }))
-      ] as EnergyTarget[];
-
-      if (!energyTargets.length) {
-        energyTargets.push(...sources.map(source => ({ type: "harvest" as const, base: source })));
-      }
+      const energyTargets = getEnergyTargets(droppedResources, structures, ruins, tombstones, sources);
 
       const laborers = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
 
@@ -180,7 +157,7 @@ function dispatchByEnergySource(
       ruins,
       tombstones,
       unplannedStructures,
-      undefined
+      energyTargets
     )
   );
 
