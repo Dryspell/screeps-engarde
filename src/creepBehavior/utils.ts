@@ -7,13 +7,12 @@ export const PATH_COLORS = {
   surveying: "#FF00FF"
 };
 
-const getSafeEnergyStores = (
-  energyStores: (
-    | { type: "harvest"; base: Source }
-    | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
-    | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin }
-  )[]
-) => {
+export type EnergyTarget =
+  | { type: "harvest"; base: Source }
+  | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
+  | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin };
+
+const getSafeEnergyStores = (energyStores: EnergyTarget[]) => {
   return energyStores.filter(energyStore => {
     return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
       ? energyStore.base.energy > 25
@@ -23,14 +22,7 @@ const getSafeEnergyStores = (
   });
 };
 
-export const getNaiveSources = (
-  energyStores: (
-    | { type: "harvest"; base: Source }
-    | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
-    | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin }
-  )[],
-  creep: Creep
-) => {
+export const getNaiveSources = (energyStores: EnergyTarget[], creep: Creep) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
   const sortedEnergyStores = getSafeEnergyStores(energyStores)
     .map(store => ({

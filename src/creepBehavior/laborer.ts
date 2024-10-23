@@ -1,5 +1,5 @@
 import { getExistingExtensions, getPlannedRoadsSteps } from "architect";
-import { findNaiveConstructionSite, getNaiveSources as getNaiveSources, PATH_COLORS } from "./utils";
+import { EnergyTarget, findNaiveConstructionSite, getNaiveSources as getNaiveSources, PATH_COLORS } from "./utils";
 
 export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   if (creep.memory.state === newState) return;
@@ -30,7 +30,7 @@ export const getUnplannedStructures = (room: Room, structures = room.find(FIND_M
   const unplannedStructures = extensions.filter(
     structure => !plannedExtensions.includes(`${structure.pos.x}_${structure.pos.y}`)
   );
-  return unplannedStructures;
+  return unplannedStructures as AnyOwnedStructure[];
 };
 
 export const laborerTick = (
@@ -43,9 +43,11 @@ export const laborerTick = (
   structures = creep.room.find(FIND_MY_STRUCTURES),
   ruins = creep.room.find(FIND_RUINS),
   tombstones = creep.room.find(FIND_TOMBSTONES),
-  unplannedStructures = getUnplannedStructures(creep.room)
+  unplannedStructures = getUnplannedStructures(creep.room),
+  energyTarget: EnergyTarget | undefined
 ) => {
   if (
+    !creep.memory.state ||
     creep.store[RESOURCE_ENERGY] === 0 ||
     (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
   ) {
@@ -88,7 +90,7 @@ export const laborerTick = (
         }
 
         break;
-      } else if (unplannedStructures.length) {
+      } else if (unplannedStructures.length && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
         const target = creep.pos.findClosestByPath(unplannedStructures);
         if (!target) {
           console.log(`[${creep.name}]: No unplanned structures found`);
@@ -104,32 +106,36 @@ export const laborerTick = (
       break;
     }
     case "harvesting": {
-      const naivestSources = getNaiveSources(
-        [
-          ...sources.map(source => ({ type: "harvest" as const, base: source })),
-          ...droppedResources.map(
-            resource => ({ type: "pickup", base: resource } as { type: "pickup"; base: Resource<RESOURCE_ENERGY> })
-          ),
-          ...(
-            structures.filter(
-              struct =>
-                // @ts-ignore
-                struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE
-            ) as (StructureContainer | StructureStorage)[]
-          ).map(
-            container =>
-              ({ type: "withdraw", base: container } as {
-                type: "withdraw";
-                base: StructureContainer | StructureStorage;
-              })
-          ),
-          ...ruins.map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
-          ...tombstones.map(
-            tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone })
-          )
-        ],
-        creep
-      );
+      const naiveEnergyTargets = energyTarget ? getNaiveSources([energyTarget], creep) : [];
+
+      const naivestSources = naiveEnergyTargets.length
+        ? naiveEnergyTargets
+        : getNaiveSources(
+            [
+              ...sources.map(source => ({ type: "harvest" as const, base: source })),
+              ...droppedResources.map(
+                resource => ({ type: "pickup", base: resource } as { type: "pickup"; base: Resource<RESOURCE_ENERGY> })
+              ),
+              ...(
+                structures.filter(
+                  struct =>
+                    // @ts-ignore
+                    struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE
+                ) as (StructureContainer | StructureStorage)[]
+              ).map(
+                container =>
+                  ({ type: "withdraw", base: container } as {
+                    type: "withdraw";
+                    base: StructureContainer | StructureStorage;
+                  })
+              ),
+              ...ruins.map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
+              ...tombstones.map(
+                tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone })
+              )
+            ],
+            creep
+          );
       if (!naivestSources.length) {
         console.log(
           `[${Game.time.toLocaleString()}]: ${creep.name} in room ${creep.room.name}; No naive energy source found`
@@ -164,9 +170,12 @@ export const laborerTick = (
         }
       })[0];
 
-      if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+      const transferResult = creep.transfer(target, RESOURCE_ENERGY);
+      if (transferResult === ERR_NOT_IN_RANGE) {
         creep.memory.target = target.id;
         creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+      } else if (transferResult !== OK) {
+        console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
       }
 
       break;

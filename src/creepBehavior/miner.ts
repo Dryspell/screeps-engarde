@@ -1,5 +1,23 @@
 import { getUnplannedStructures, switchState } from "./laborer";
-import { getNaiveSources, PATH_COLORS } from "./utils";
+import { EnergyTarget, getNaiveSources, PATH_COLORS } from "./utils";
+
+const attemptToBuildCloseConstructionSites = (
+  creep: Creep,
+  closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
+) => {
+  if (!creep.body.some(part => part.type === "carry")) {
+    return;
+  }
+
+  for (const site of closeConstructionSites) {
+    const buildResult = creep.build(site);
+    if (buildResult === OK) {
+      return;
+    } else {
+      console.log(`[${creep.name}]: Failed to build ${site.id} with result ${buildResult}`);
+    }
+  }
+};
 
 export const minerTick = (
   creep: Creep,
@@ -11,38 +29,34 @@ export const minerTick = (
   structures = creep.room.find(FIND_MY_STRUCTURES),
   ruins = creep.room.find(FIND_RUINS),
   tombstones = creep.room.find(FIND_TOMBSTONES),
-  unplannedStructures = getUnplannedStructures(creep.room)
+  unplannedStructures = getUnplannedStructures(creep.room),
+  energyTarget: EnergyTarget | undefined
 ) => {
   switchState(creep, "harvesting");
-
-  const attemptToBuildCloseConstructionSites = () => {
-    if (!creep.body.some(part => part.type === "carry")) {
-      return;
-    }
-
-    const closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3);
-
-    for (const site of closeConstructionSites) {
-      const buildResult = creep.build(site);
-      if (buildResult === OK) {
-        return;
-      } else {
-        console.log(`[${creep.name}]: Failed to build ${site.id} with result ${buildResult}`);
-      }
-    }
-  };
 
   const adjacentSource = sources.find(source => creep.pos.isNearTo(source));
 
   if (adjacentSource) {
-    if (creep.harvest(adjacentSource) === ERR_NOT_ENOUGH_RESOURCES) {
-      attemptToBuildCloseConstructionSites();
+    const closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3);
+
+    if (
+      (creep.store.getCapacity(RESOURCE_ENERGY) &&
+        !creep.store.getFreeCapacity(RESOURCE_ENERGY) &&
+        closeConstructionSites.length) ||
+      creep.harvest(adjacentSource) === ERR_NOT_ENOUGH_RESOURCES
+    ) {
+      attemptToBuildCloseConstructionSites(creep, closeConstructionSites);
     }
   } else {
-    const naivestSources = getNaiveSources(
-      sources.map(source => ({ type: "harvest", base: source })),
-      creep
-    );
+    const naiveEnergyTargets = energyTarget ? getNaiveSources([energyTarget], creep) : [];
+
+    const naivestSources = naiveEnergyTargets.length
+      ? naiveEnergyTargets
+      : getNaiveSources(
+          sources.map(source => ({ type: "harvest", base: source })),
+          creep
+        );
+
     if (!naivestSources.length) {
       console.log(`[${creep.name}]: No sources found to harvest`);
       return;
@@ -59,7 +73,7 @@ export const minerTick = (
       creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "harvesting"] } });
     } else if (creep.harvest(target.base) === ERR_NOT_ENOUGH_RESOURCES) {
       console.log(`[${creep.name}]: Source ${target.base.id} is empty`);
-      attemptToBuildCloseConstructionSites();
+      attemptToBuildCloseConstructionSites(creep);
     }
   }
 };

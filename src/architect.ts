@@ -62,8 +62,20 @@ const planAndBuildTowers = (
   roomController: StructureController,
   sources: Source[] = room.find(FIND_SOURCES),
   constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
-  towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[]
+  towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[],
+  plannedRoads = getPlannedRoadsSteps(room),
+  VISUALIZE_ONLY = true
 ) => {
+  if (VISUALIZE_TOWERS) {
+    Memory.rooms[room.name].towers.forEach(tower => {
+      room.visual.circle(tower.pos.x, tower.pos.y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
+    });
+  }
+
+  if (VISUALIZE_ONLY) {
+    return;
+  }
+
   if (!Memory.rooms[room.name].towers || Memory.rooms[room.name].towers?.length < MAX_TOWERS_IN_ROOM) {
     Memory.rooms[room.name].towers = [
       ...towers.map(tower => ({
@@ -97,8 +109,6 @@ const planAndBuildTowers = (
       const y = centroid[1] + Math.floor(i / towerSpace) - Math.floor(towerSpace / 2);
       return [x, y] as [x: number, y: number];
     });
-
-    const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
 
     const structuresAroundCentroid = room
       .lookAtArea(
@@ -198,9 +208,18 @@ export const planAndBuildExtensions = (
   extensions = room.find(FIND_MY_STRUCTURES, {
     filter: { structureType: STRUCTURE_EXTENSION }
   }) as StructureExtension[],
-  plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }))
+  plannedRoads = getPlannedRoadsSteps(room),
+  VISUALIZE_ONLY = true
 ) => {
   // console.log(`[${Game.time.toLocaleString()}] Room ${room.name} has ${extensions.length} extensions`);
+
+  if (VISUALIZE_EXTENSIONS) {
+    Memory.rooms[room.name].extensions.forEach(extension => {
+      room.visual.circle(extension.pos.x, extension.pos.y, { fill: "transparent", radius: 0.5, stroke: "green" });
+    });
+  }
+
+  if (VISUALIZE_ONLY) return;
 
   if (!Memory.rooms[room.name].extensions?.length || !extensions.length) {
     Memory.rooms[room.name].extensions = getExistingExtensions(room, constructionSites, extensions);
@@ -253,14 +272,6 @@ export const planAndBuildExtensions = (
         });
       }
     });
-
-    if (VISUALIZE_EXTENSIONS) {
-      freeSpaceAroundSpawn.forEach(([x, y]) => {
-        room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "green" });
-      });
-    }
-
-    if (VISUALIZE_ONLY) return;
 
     freeSpaceAroundSpawn
       .sort(
@@ -323,13 +334,16 @@ const planAndBuildContainers = (
   room: Room,
   spawns: StructureSpawn[],
   constructionSites: ConstructionSite<BuildableStructureConstant>[],
-  structures: Structure<StructureConstant>[]
+  structures: Structure<StructureConstant>[],
+  VISUALIZE_ONLY = true
 ) => {
   if (VISUALIZE_CONTAINERS) {
     Memory.rooms[room.name].minerPositions.forEach(({ x, y }) => {
       room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "yellow" });
     });
   }
+
+  if (VISUALIZE_ONLY) return;
 
   const containers = [
     ...(structures.filter(structure => structure.structureType === STRUCTURE_CONTAINER) as StructureContainer[]),
@@ -381,17 +395,18 @@ export const architectRoom = (
     return;
   }
 
+  planAndBuildContainers(room, spawns, constructionSites, structures, Game.time % 100 === 0);
+
   const plannedRoads = getPlannedRoadsSteps(room);
-
-  planAndBuildContainers(room, spawns, constructionSites, structures);
-
   planAndBuildTowers(
     room,
     spawns,
     roomController,
     sources,
     constructionSites,
-    structures.filter(structure => structure.structureType === STRUCTURE_TOWER) as StructureTower[]
+    structures.filter(structure => structure.structureType === STRUCTURE_TOWER) as StructureTower[],
+    plannedRoads,
+    Game.time % 100 === 0
   );
 
   planAndBuildExtensions(
@@ -400,7 +415,8 @@ export const architectRoom = (
     roomController,
     constructionSites,
     structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION) as StructureExtension[],
-    plannedRoads
+    plannedRoads,
+    Game.time % 100 === 0
   );
 
   createRoadsForPaths(room);
