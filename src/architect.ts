@@ -5,6 +5,8 @@ import { memorizeRoom } from "memorizeRoom";
 const VISUALIZE_PATHS = true;
 const VISUALIZE_EXTENSIONS = true;
 const VISUALIZE_TOWERS = true;
+const VISUALIZE_CONTAINERS = true;
+const VISUALIZE_WALLS = true;
 const VISUALIZE_ONLY = false;
 
 const createRoads = (room: Room, memorizedPath: RoomMemory["paths"][number], omitEnd = true) => {
@@ -315,13 +317,48 @@ function constructSpawn(room: Room, roomController: StructureController, roomSou
   }
 }
 
+const MAX_CONTAINERS_IN_ROOM = 5;
+
+const planAndBuildContainers = (
+  room: Room,
+  spawns: StructureSpawn[],
+  constructionSites: ConstructionSite<BuildableStructureConstant>[],
+  structures: Structure<StructureConstant>[]
+) => {
+  if (VISUALIZE_CONTAINERS) {
+    Memory.rooms[room.name].minerPositions.forEach(({ x, y }) => {
+      room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "yellow" });
+    });
+  }
+
+  const containers = [
+    ...(structures.filter(structure => structure.structureType === STRUCTURE_CONTAINER) as StructureContainer[]),
+    ...constructionSites.filter(site => site.structureType === STRUCTURE_CONTAINER)
+  ];
+
+  if (containers.length < MAX_CONTAINERS_IN_ROOM) {
+    const referencePosition = spawns[0].pos ?? room.controller?.pos ?? { x: 25, y: 25 };
+    for (const position of Memory.rooms[room.name].minerPositions
+      .sort((posA, posB) => referencePosition.getRangeTo(posA.x, posA.y) - referencePosition.getRangeTo(posB.x, posB.y))
+      .slice(containers.length, MAX_CONTAINERS_IN_ROOM)) {
+      if (room.createConstructionSite(position.x, position.y, STRUCTURE_CONTAINER) === OK) {
+        console.log(`[${Game.time.toLocaleString()}] Building container at ${position.x}, ${position.y}`);
+        room.visual.text(`🏗️ Building Container`, position.x + 1, position.y, {
+          align: "left",
+          opacity: 0.8
+        });
+      }
+    }
+  }
+};
+
 const planAndBuildWalls = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {};
 
 export const architectRoom = (
   room: Room,
   sources = room.find(FIND_SOURCES),
   constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
-  structures = room.find(FIND_MY_STRUCTURES),
+  structures = room.find(FIND_MY_STRUCTURES)
 ) => {
   const spawns = room.find(FIND_MY_SPAWNS);
   const roomController = room.controller;
@@ -346,6 +383,8 @@ export const architectRoom = (
 
   const plannedRoads = getPlannedRoadsSteps(room);
 
+  planAndBuildContainers(room, spawns, constructionSites, structures);
+
   planAndBuildTowers(
     room,
     spawns,
@@ -354,6 +393,7 @@ export const architectRoom = (
     constructionSites,
     structures.filter(structure => structure.structureType === STRUCTURE_TOWER) as StructureTower[]
   );
+
   planAndBuildExtensions(
     room,
     spawns,
@@ -362,6 +402,7 @@ export const architectRoom = (
     structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION) as StructureExtension[],
     plannedRoads
   );
+
   createRoadsForPaths(room);
   // planAndBuildWalls(room, spawn, roomController);
 };

@@ -33,10 +33,9 @@ function memorizePaths(
   controller: StructureController | undefined,
   sources: Source[],
   minerals: Mineral<MineralConstant>[],
-  exits: ReturnType<typeof getExits>
+  exits: ReturnType<typeof getExits>,
+  terrain = new Room.Terrain(room.name)
 ) {
-  const terrain = new Room.Terrain(room.name);
-
   return [
     // Paths from Controller to Sources
     ...(controller
@@ -158,6 +157,25 @@ function memorizePaths(
   ];
 }
 
+const memorizeMinerPositions = (room: Room, sources: Source[], terrain = new Room.Terrain(room.name)) => {
+  return flatten(
+    sources.map(source =>
+      [
+        [-1, 0],
+        [0, 1],
+        [1, 0],
+        [0, -1],
+        [-1, -1],
+        [-1, 1],
+        [1, 1],
+        [1, -1]
+      ]
+        .map(([x, y]) => ({ x: source.pos.x + x, y: source.pos.y + y }))
+        .filter(step => terrain.get(step.x, step.y) !== TERRAIN_MASK_WALL)
+    )
+  );
+};
+
 export function memorizeRoom(
   room: Room,
   refreshMemory = false,
@@ -173,6 +191,7 @@ export function memorizeRoom(
 
   if (!Memory.rooms[room.name] || refreshMemory) {
     const exits = getExits(room);
+    const terrain = new Room.Terrain(room.name);
 
     Memory.rooms[room.name] = {
       spawns: spawns.map(spawn => memorizeSpawnData(spawn, exits)),
@@ -186,7 +205,9 @@ export function memorizeRoom(
       containsHostiles: room.find(FIND_HOSTILE_CREEPS).length > 0,
       exits,
       paths: memorizePaths(room, spawns, controller, sources, minerals, exits),
-      lastMemorizedTick: Game.time
+      minerPositions: memorizeMinerPositions(room, sources, terrain),
+      terrain,
+      lastMemorizedTick: Game.time,
     };
   }
 

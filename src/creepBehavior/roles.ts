@@ -1,32 +1,40 @@
-// import { builderTick } from "creepBehavior/builder";
 import { claimerTick } from "creepBehavior/claimer";
-// import { harvesterTick } from "creepBehavior/harvester";
-import { upgraderTick } from "creepBehavior/upgrader";
 import { laborerTick } from "./laborer";
+import { minerTick } from "./miner";
+
+const bodyCost = (body: BodyPartConstant[]) => body.reduce((acc, part) => acc + BODYPART_COST[part], 0);
 
 export const ROLES = {
-  // harvester: {
-  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-  //   max: 4,
-  //   tick: harvesterTick,
-  //   spawnCondition: (room: Room) => true
-  // },
-  // upgrader: {
-  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-  //   max: 3,
-  //   tick: upgraderTick,
-  //   spawnCondition: (room: Room) => room.controller && room.controller?.level < 8
-  // },
-  // builder: {
-  //   body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-  //   max: 6,
-  //   tick: builderTick,
-  //   spawnCondition: (room: Room) => true
-  //   // Object.values(Game.rooms).some(
-  //   //   room => room.find(FIND_MY_CONSTRUCTION_SITES).length > 0 || room.find(FIND_MY_SPAWNS).length === 0
-  //   // )
-  // },
+  miner: {
+    generateBody: (spawn: StructureSpawn) => {
+      const defaultBody: BodyPartConstant[] = spawn.room.find(FIND_MY_CONSTRUCTION_SITES, {
+        filter: site => site.structureType === STRUCTURE_CONTAINER
+      }).length
+        ? [MOVE, CARRY]
+        : [MOVE];
+      let availableEnergy = spawn.room.energyAvailable - bodyCost(defaultBody);
+      const bodyParts = defaultBody;
 
+      while (availableEnergy >= BODYPART_COST[WORK]) {
+        bodyParts.push(WORK);
+        availableEnergy -= BODYPART_COST[WORK];
+      }
+      return bodyParts;
+    },
+    spawnCondition: (room: Room, creeps: Creep[]) => {
+      const nonMinerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role !== "miner");
+      const minerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
+
+      return (
+        room.energyAvailable >= bodyCost([MOVE, WORK, WORK]) &&
+        nonMinerCreeps.length &&
+        Memory.rooms[room.name].minerPositions?.length &&
+        minerCreeps.length < Memory.rooms[room.name].minerPositions?.length &&
+        nonMinerCreeps.length >= minerCreeps.length
+      );
+    },
+    tick: minerTick
+  },
   // multirole harvester, upgrader, builder
   laborer: {
     body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],

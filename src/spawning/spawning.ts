@@ -42,43 +42,47 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       return;
     }
 
-    if (
-      spawn.room.find(FIND_MY_CREEPS).length &&
-      sortedRoles.every(
-        ([_, { body }]) =>
-          generateBody(spawn.room.energyAvailable, body).length <
-          generateBody(spawn.room.energyCapacityAvailable, body).length
-      )
-    ) {
-      // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Not enough energy to spawn max body`);
-      return;
-    }
+    const creepsInRoom = creeps.filter(creep => creep.room.name === spawn.room.name);
 
-    if (
-      creeps.filter(creep => creep.room.name === spawn.room.name).length >=
-      sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)
-    ) {
-      // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Too many creeps to spawn another`);
-      return;
-    }
+    //! Having too many creeps in a room is not a good condition to stop spawning, needs more dynamic conditions
+    // if (
+    //   creeps.filter(creep => creep.room.name === spawn.room.name).length >=
+    //   sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)
+    // ) {
+    //   // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Too many creeps to spawn another`);
+    //   return;
+    // }
 
     for (const entry of sortedRoles) {
-      const [role, { body, max, spawnCondition }] = entry;
-      if (
-        !isValidRole(role) ||
-        !spawnCondition(spawn.room) ||
-        creeps.filter(creep => creep.room.name === spawn.room.name && creep.memory.role === role).length >= max
-      )
+      const [roleName, role] = entry;
+      if (!isValidRole(roleName) || !role.spawnCondition(spawn.room, creeps)) {
+        // console.log(
+        //   `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Cannot spawn ${roleName} due to spawn condition`
+        // );
         continue;
+      }
 
-      const newBody = generateBody(spawn.room.energyAvailable, body);
+      const newBody =
+        "body" in role
+          ? generateBody(spawn.room.energyAvailable, role.body)
+          : role.generateBody(spawn);
+
+      const bestBody =
+        "body" in role
+          ? generateBody(spawn.room.energyCapacityAvailable, role.body)
+          : role.generateBody(spawn);
+
+      if (creepsInRoom.length && newBody.length < bestBody.length) {
+        continue;
+      }
+
       if (
-        spawn.spawnCreep(newBody, nameCreep(role), {
-          memory: { role, room: spawn.room.name, spawn: spawn.name }
+        spawn.spawnCreep(newBody, nameCreep(roleName), {
+          memory: { role: roleName, room: spawn.room.name, spawn: spawn.name }
         }) === OK
       ) {
         console.log(
-          `[${Game.time.toLocaleString()}] Room ${spawn.room.name}: Spawning new ${role} with body: [${newBody.join(
+          `[${Game.time.toLocaleString()}] Room ${spawn.room.name}: Spawning new ${roleName} with body: [${newBody.join(
             ", "
           )}]`
         );

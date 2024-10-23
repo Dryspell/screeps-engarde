@@ -24,6 +24,8 @@ declare global {
     exits: ReturnType<typeof getExits>;
     containsHostiles: boolean;
     paths: { path: PathStep[]; constructedRoad: boolean }[];
+    minerPositions: { x: number; y: number }[];
+    terrain: RoomTerrain;
     lastMemorizedTick: typeof Game.time;
   }
 
@@ -80,6 +82,14 @@ export const loop = ErrorMapper.wrapLoop(() => {
         if (!ROLES[creep.memory.role]) {
           creep.memory.role = "laborer";
         }
+
+        // TODO: K-means clustering for available energy sources for creeps that are in harvesting state
+        // BFR Algorithm to choose k centroids
+        // Choose k random points, find centroid
+        // Choose k-1 points that are farthest from the centroid, find centroid
+        // repeat until k centroids are found
+        // Cluster using these centroids
+        // Do we even need to do this or just use the closest source?
 
         ROLES[creep.memory.role].tick(
           creep,

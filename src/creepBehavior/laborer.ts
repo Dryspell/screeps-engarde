@@ -1,7 +1,7 @@
 import { getExistingExtensions, getPlannedRoadsSteps } from "architect";
-import { findNaiveConstructionSite, getNaiveSource as getNaiveSources, PATH_COLORS } from "./utils";
+import { findNaiveConstructionSite, getNaiveSources as getNaiveSources, PATH_COLORS } from "./utils";
 
-const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
+export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   if (creep.memory.state === newState) return;
 
   creep.memory.state = newState;

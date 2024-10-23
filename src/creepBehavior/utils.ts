@@ -7,7 +7,23 @@ export const PATH_COLORS = {
   surveying: "#FF00FF"
 };
 
-export const getNaiveSource = (
+const getSafeEnergyStores = (
+  energyStores: (
+    | { type: "harvest"; base: Source }
+    | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
+    | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin }
+  )[]
+) => {
+  return energyStores.filter(energyStore => {
+    return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
+      ? energyStore.base.energy > 25
+      : energyStore.type === "withdraw"
+      ? energyStore.base.store[RESOURCE_ENERGY] > 0
+      : true;
+  });
+};
+
+export const getNaiveSources = (
   energyStores: (
     | { type: "harvest"; base: Source }
     | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
@@ -16,14 +32,7 @@ export const getNaiveSource = (
   creep: Creep
 ) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
-  const safeStores = energyStores
-    .filter(energyStore => {
-      return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
-        ? energyStore.base.energy > 0
-        : energyStore.type === "withdraw"
-        ? energyStore.base.store[RESOURCE_ENERGY] > 0
-        : true;
-    })
+  const sortedEnergyStores = getSafeEnergyStores(energyStores)
     .map(store => ({
       ...store,
       path: creep.pos.findPathTo(store.base),
@@ -32,7 +41,7 @@ export const getNaiveSource = (
     .filter(store => store.validPath !== null)
     .sort((a, b) => a.path.length - b.path.length);
 
-  return safeStores;
+  return sortedEnergyStores;
 };
 
 export const findNaiveConstructionSite = (constructionSites: ConstructionSite[], creep: Creep) => {
