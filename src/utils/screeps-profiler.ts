@@ -11,34 +11,44 @@ function AlreadyWrappedError() {
   this.stack = new Error().stack;
 }
 
+export function stream(duration: number, filter?: string) {
+  setupMemory("stream", duration || 10, filter);
+}
+
+export function email(duration: number, filter?: string) {
+  setupMemory("email", duration || 100, filter);
+}
+
+export function profile(duration: number, filter?: string) {
+  setupMemory("profile", duration || 100, filter);
+}
+
+export function background(filter?: string) {
+  setupMemory("background", false, filter);
+}
+
+export function restart() {
+  if (Profiler.isProfiling()) {
+    const filter = Memory.profiler.filter;
+    let duration = false;
+    if (!!Memory.profiler.disableTick) {
+      // Calculate the original duration, profile is enabled on the tick after the first call,
+      // so add 1.
+      duration = Memory.profiler.disableTick - Memory.profiler.enabledTick + 1;
+    }
+    const type = Memory.profiler.type;
+    setupMemory(type, duration, filter);
+  }
+}
+
 function setupProfiler() {
   depth = 0; // reset depth, this needs to be done each tick.
   Game.profiler = {
-    stream(duration, filter) {
-      setupMemory("stream", duration || 10, filter);
-    },
-    email(duration, filter) {
-      setupMemory("email", duration || 100, filter);
-    },
-    profile(duration, filter) {
-      setupMemory("profile", duration || 100, filter);
-    },
-    background(filter) {
-      setupMemory("background", false, filter);
-    },
-    restart() {
-      if (Profiler.isProfiling()) {
-        const filter = Memory.profiler.filter;
-        let duration = false;
-        if (!!Memory.profiler.disableTick) {
-          // Calculate the original duration, profile is enabled on the tick after the first call,
-          // so add 1.
-          duration = Memory.profiler.disableTick - Memory.profiler.enabledTick + 1;
-        }
-        const type = Memory.profiler.type;
-        setupMemory(type, duration, filter);
-      }
-    },
+    stream,
+    email,
+    profile,
+    background,
+    restart,
     reset: resetMemory,
     output: Profiler.output
   };
@@ -190,7 +200,7 @@ const Profiler = {
     Game.notify(Profiler.output(1000));
   },
 
-  output(passedOutputLengthLimit) {
+  output(passedOutputLengthLimit = 1000) {
     const outputLengthLimit = passedOutputLengthLimit || 1000;
     if (!Memory.profiler || !Memory.profiler.enabledTick) {
       return "Profiler not active.";
@@ -340,7 +350,7 @@ export function enable() {
   hookUpPrototypes();
 }
 
-// output: Profiler.output,
+export const profilerOutput = Profiler.output;
 
 // registerObject: profileObjectFunctions,
 // registerClass: profileObjectFunctions

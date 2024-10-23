@@ -257,7 +257,7 @@ export const memorizeRoom = profileFunction(
     spawns = room.find(FIND_MY_SPAWNS),
     sources = room.find(FIND_SOURCES),
     controller = room.controller,
-    structures = room.find(FIND_MY_STRUCTURES),
+    structures = room.find(FIND_STRUCTURES),
     minerals = room.find(FIND_MINERALS)
   ) => {
     if (refreshMemory) {

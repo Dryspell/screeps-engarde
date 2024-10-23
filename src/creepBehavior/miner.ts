@@ -6,7 +6,7 @@ const attemptToBuildCloseConstructionSites = (
   creep: Creep,
   closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
 ) => {
-  if (!creep.body.some(part => part.type === "carry")) {
+  if (!creep.body.some(part => part.type === "carry") || !creep.store.getUsedCapacity(RESOURCE_ENERGY)) {
     return;
   }
 
@@ -15,7 +15,7 @@ const attemptToBuildCloseConstructionSites = (
     if (buildResult === OK) {
       return;
     } else {
-      console.log(`[${creep.name}]: Failed to build ${site.id} with result ${buildResult}`);
+      console.log(`[${creep.room.name}]: ${creep.name} Failed to build ${site.id} with result ${buildResult}`);
     }
   }
 };
@@ -28,7 +28,7 @@ export const minerTick = profileFunction(
     droppedResources = creep.room.find(FIND_DROPPED_RESOURCES, {
       filter: resource => resource.resourceType === RESOURCE_ENERGY
     }),
-    structures = creep.room.find(FIND_MY_STRUCTURES),
+    structures = creep.room.find(FIND_STRUCTURES),
     ruins = creep.room.find(FIND_RUINS),
     tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),

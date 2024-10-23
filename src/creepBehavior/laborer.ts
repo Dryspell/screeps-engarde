@@ -10,7 +10,7 @@ export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   console.log(`[${Game.time.toLocaleString()}]: ${creep.name} Switching to ${newState}`);
 };
 
-export const getUnplannedStructures = profileFunction((room: Room, structures = room.find(FIND_MY_STRUCTURES)) => {
+export const getUnplannedStructures = profileFunction((room: Room, structures = room.find(FIND_STRUCTURES)) => {
   // If there is a building that is unplanned, dismantle it
   const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
 
@@ -30,7 +30,7 @@ export const getUnplannedStructures = profileFunction((room: Room, structures = 
   const unplannedStructures = extensions.filter(
     structure => !plannedExtensions.includes(`${structure.pos.x}_${structure.pos.y}`)
   );
-  return unplannedStructures as AnyOwnedStructure[];
+  return unplannedStructures as AnyStructure[];
 }, "getUnplannedStructures");
 
 export const laborerTick = profileFunction(
@@ -41,7 +41,7 @@ export const laborerTick = profileFunction(
     droppedResources = creep.room.find(FIND_DROPPED_RESOURCES, {
       filter: resource => resource.resourceType === RESOURCE_ENERGY
     }),
-    structures = creep.room.find(FIND_MY_STRUCTURES),
+    structures = creep.room.find(FIND_STRUCTURES),
     ruins = creep.room.find(FIND_RUINS),
     tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),
@@ -111,21 +111,44 @@ export const laborerTick = profileFunction(
 
         if (!naivestSources.length) {
           console.log(
-            `[${Game.time.toLocaleString()}]: ${creep.name} in room ${creep.room.name}; No naive energy source found`
+            `[${Game.time.toLocaleString()}]: ${creep.name} in room ${
+              creep.room.name
+            }; No naive energy source found, ${energyTargets
+              .map(
+                target =>
+                  `${target.type}: (${target.base.pos.x}, ${target.base.pos.y}) ${
+                    target.type === "withdraw" ? target.base.store.getUsedCapacity(RESOURCE_ENERGY) : "UNKNOWN"
+                  }`
+              )
+              .join(" | ")}`
           );
-          return;
+          naivestSources.push(
+            ...getNaiveSources(
+              sources.map(source => ({ type: "harvest" as const, base: source })),
+              creep
+            )
+          );
         }
 
         for (const source of naivestSources) {
-          if (source.type === "harvest" && creep.harvest(source.base) === ERR_NOT_IN_RANGE) {
+          if (
+            source.type === "harvest" &&
+            creep.harvest(source.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
             creep.memory.target = source.base.id;
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
-          } else if (source.type === "pickup" && creep.pickup(source.base) === ERR_NOT_IN_RANGE) {
+          } else if (
+            source.type === "pickup" &&
+            creep.pickup(source.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
             creep.memory.target = source.base.id;
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
-          } else if (source.type === "withdraw" && creep.withdraw(source.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          } else if (
+            source.type === "withdraw" &&
+            creep.withdraw(source.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
             creep.memory.target = source.base.id;
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
           }
 
           // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
@@ -134,7 +157,7 @@ export const laborerTick = profileFunction(
       }
 
       case "transferring": {
-        const target = creep.room.find(FIND_MY_STRUCTURES, {
+        const target = creep.room.find(FIND_STRUCTURES, {
           filter: structure => {
             return (
               (structure.structureType === STRUCTURE_EXTENSION || structure.structureType === STRUCTURE_SPAWN) &&

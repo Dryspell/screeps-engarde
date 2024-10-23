@@ -6,7 +6,7 @@ export function handleBuildingTowers(
   spawn: StructureSpawn,
   roomSources: Source[]
 ) {
-  const towers = room.find(FIND_MY_STRUCTURES, {
+  const towers = room.find(FIND_STRUCTURES, {
     filter: { structureType: STRUCTURE_TOWER }
   }) as StructureTower[];
   if (room.controller && !towers.length && !constructionSites.some(site => site.structureType === STRUCTURE_TOWER)) {
@@ -47,7 +47,7 @@ export function handleBuildingTowers(
 
 export function towerBehavior(controlledRooms: Room[]) {
   controlledRooms.forEach(room => {
-    const towers = room.find(FIND_MY_STRUCTURES, {
+    const towers = room.find(FIND_STRUCTURES, {
       filter: { structureType: STRUCTURE_TOWER }
     }) as StructureTower[];
 

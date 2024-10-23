@@ -7,7 +7,17 @@ import { architectRoom } from "architect";
 import { getUnplannedStructures } from "creepBehavior/laborer";
 import { kmeans } from "spatial-utils";
 import { EnergyTarget, getEnergyTargets } from "creepBehavior/utils";
-import { enable as enableProfiler, wrap as profilerWrap } from "utils/screeps-profiler";
+import {
+  type background,
+  type email,
+  enable as enableProfiler,
+  type profile,
+  profileFunction,
+  profilerOutput,
+  wrap as profilerWrap,
+  type restart,
+  type stream
+} from "utils/screeps-profiler";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -50,6 +60,17 @@ declare global {
     // working: boolean;
   }
 
+  interface Game {
+    profiler: {
+      stream: typeof stream;
+      email: typeof email;
+      profile: typeof profile;
+      background: typeof background;
+      restart: typeof restart;
+      output: typeof profilerOutput;
+    };
+  }
+
   // Syntax for adding properties to `global` (ex "global.log")
   namespace NodeJS {
     interface Global {
@@ -70,6 +91,12 @@ export const loop = ErrorMapper.wrapLoop(() =>
       return;
     }
 
+    if (Game.time % 20 === 0) {
+      console.log(`[${Game.time.toLocaleString()}] Profiling`);
+      Game.profiler.output();
+      Game.profiler.profile(20);
+    }
+
     const creeps = Object.values(Game.creeps);
     const spawns = Object.values(Game.spawns);
     const controlledRooms = Object.values(Game.rooms);
@@ -84,7 +111,7 @@ export const loop = ErrorMapper.wrapLoop(() =>
       const droppedResources = room.find(FIND_DROPPED_RESOURCES, {
         filter: resource => resource.resourceType === RESOURCE_ENERGY
       });
-      const structures = room.find(FIND_MY_STRUCTURES);
+      const structures = room.find(FIND_STRUCTURES);
 
       architectRoom(room, sources, constructionSites, structures);
 
@@ -142,10 +169,10 @@ function dispatchByEnergySource(
   sources: Source[],
   constructionSites: ConstructionSite<BuildableStructureConstant>[],
   droppedResources: Resource<ResourceConstant>[],
-  structures: AnyOwnedStructure[],
+  structures: AnyStructure[],
   ruins: Ruin[],
   tombstones: Tombstone[],
-  unplannedStructures: AnyOwnedStructure[]
+  unplannedStructures: AnyStructure[]
 ) {
   creeps.forEach(creep =>
     ROLES[creep.memory.role].tick(

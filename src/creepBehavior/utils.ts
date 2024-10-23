@@ -17,21 +17,21 @@ export type EnergyTarget =
 export const getEnergyTargets = profileFunction(
   (
     droppedResources: Resource<ResourceConstant>[],
-    structures: AnyOwnedStructure[],
+    structures: AnyStructure[],
     ruins: Ruin[],
     tombstones: Tombstone[],
     sources: Source[]
   ) => {
     const energyTargets = [
-      // ...sources.map(source => ({ type: "harvest" as const, base: source })),
+      ...sources.filter(source => source.energy > 25).map(source => ({ type: "harvest" as const, base: source })),
       ...droppedResources
         .filter(resource => resource.amount > 25)
         .map(resource => ({ type: "pickup", base: resource } as { type: "pickup"; base: Resource<RESOURCE_ENERGY> })),
       ...(
         structures.filter(
           struct =>
-            // @ts-ignore
-            struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE
+            struct.structureType === STRUCTURE_CONTAINER ||
+            (struct.structureType === STRUCTURE_STORAGE && struct.store[RESOURCE_ENERGY] > 25)
         ) as (StructureContainer | StructureStorage)[]
       ).map(
         container =>
@@ -40,8 +40,12 @@ export const getEnergyTargets = profileFunction(
             base: StructureContainer | StructureStorage;
           })
       ),
-      ...ruins.map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
-      ...tombstones.map(tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone }))
+      ...ruins
+        .filter(ruin => ruin.store[RESOURCE_ENERGY] > 0)
+        .map(ruin => ({ type: "withdraw", base: ruin } as { type: "withdraw"; base: Ruin })),
+      ...tombstones
+        .filter(tombstone => tombstone.store[RESOURCE_ENERGY] > 0)
+        .map(tombstone => ({ type: "withdraw", base: tombstone } as { type: "withdraw"; base: Tombstone }))
     ] as EnergyTarget[];
 
     if (!energyTargets.length) {
@@ -57,7 +61,7 @@ const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
     return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
       ? energyStore.base.energy > 25
       : energyStore.type === "withdraw"
-      ? energyStore.base.store[RESOURCE_ENERGY] > 0
+      ? energyStore.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
       : true;
   });
 }, "getSafeEnergyStores");

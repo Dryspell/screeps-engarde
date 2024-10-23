@@ -61,7 +61,7 @@ const planAndBuildTowers = profileFunction(
     roomController: StructureController,
     sources: Source[] = room.find(FIND_SOURCES),
     constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
-    towers = room.find(FIND_MY_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[],
+    towers = room.find(FIND_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }) as StructureTower[],
     plannedRoads = getPlannedRoadsSteps(room),
     VISUALIZE_ONLY = true
   ) => {
@@ -182,7 +182,7 @@ export const getExistingExtensions = profileFunction(
   (
     room: Room,
     constructionSites: ConstructionSite<BuildableStructureConstant>[] = room.find(FIND_MY_CONSTRUCTION_SITES),
-    extensions = room.find(FIND_MY_STRUCTURES, {
+    extensions = room.find(FIND_STRUCTURES, {
       filter: { structureType: STRUCTURE_EXTENSION }
     }) as StructureExtension[]
   ) => {
@@ -210,7 +210,7 @@ export const planAndBuildExtensions = profileFunction(
     spawns: StructureSpawn[],
     roomController: StructureController,
     constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
-    extensions = room.find(FIND_MY_STRUCTURES, {
+    extensions = room.find(FIND_STRUCTURES, {
       filter: { structureType: STRUCTURE_EXTENSION }
     }) as StructureExtension[],
     plannedRoads = getPlannedRoadsSteps(room),
@@ -385,7 +385,7 @@ export const architectRoom = profileFunction(
     room: Room,
     sources = room.find(FIND_SOURCES),
     constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
-    structures = room.find(FIND_MY_STRUCTURES)
+    structures = room.find(FIND_STRUCTURES)
   ) => {
     const spawns = room.find(FIND_MY_SPAWNS);
     const roomController = room.controller;
