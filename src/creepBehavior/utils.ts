@@ -1,3 +1,4 @@
+import { _hasPos } from "spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
@@ -30,8 +31,8 @@ export const getEnergyTargets = profileFunction(
       ...(
         structures.filter(
           struct =>
-            struct.structureType === STRUCTURE_CONTAINER ||
-            (struct.structureType === STRUCTURE_STORAGE && struct.store[RESOURCE_ENERGY] > 25)
+            (struct.structureType === STRUCTURE_CONTAINER || struct.structureType === STRUCTURE_STORAGE) &&
+            struct.store[RESOURCE_ENERGY] > 25
         ) as (StructureContainer | StructureStorage)[]
       ).map(
         container =>
@@ -66,7 +67,7 @@ const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
   });
 }, "getSafeEnergyStores");
 
-const cachePathLength = profileFunction((sourcePos: _HasRoomPosition, store: EnergyTarget) => {
+export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, store: EnergyTarget) => {
   if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
     return 0;
   }
@@ -82,7 +83,7 @@ const cachePathLength = profileFunction((sourcePos: _HasRoomPosition, store: Ene
     Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] = [];
   }
   if (!Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
-    const path = store.base.pos.findPathTo(sourcePos.pos, { ignoreCreeps: true });
+    const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
     path.forEach((step, i) => {
       if (!Memory.cachedPaths[concatenatedPosition][step.x]) {
         Memory.cachedPaths[concatenatedPosition][step.x] = [];

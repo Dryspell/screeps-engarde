@@ -1,4 +1,6 @@
-type _hasPos = { pos: { x: number; y: number } };
+import { profileFunction } from "utils/screeps-profiler";
+
+export type _hasPos = { pos: { x: number; y: number } };
 
 const distance2 = <T extends _hasPos>(a: T, b: T) => {
   return (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
@@ -45,7 +47,7 @@ const chooseCentroids = <Tdata extends _hasPos>(k: number, data: Tdata[]) => {
   return centroids;
 };
 
-export const kmeans = <Tdata extends _hasPos>(k: number, data: Tdata[]) => {
+export const kmeans = profileFunction(<Tdata extends _hasPos>(k: number, data: Tdata[]) => {
   k = Math.min(k, data.length);
   if (k === 0) {
     return data.length ? [{ centroid: computeCentroid(data), cluster: data }] : [];
@@ -86,4 +88,4 @@ export const kmeans = <Tdata extends _hasPos>(k: number, data: Tdata[]) => {
   }
 
   return clusters.map((cluster, i) => ({ centroid: centroids[i], cluster }));
-};
+}, "kmeans");
