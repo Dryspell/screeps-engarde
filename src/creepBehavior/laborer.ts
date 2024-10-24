@@ -13,7 +13,7 @@ export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
 
   creep.memory.state = newState;
   newState && creep.say(newState);
-  console.log(`[${Game.time.toLocaleString()}]: ${creep.name} Switching to ${newState}`);
+  console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name}, ${creep.name} Switching to ${newState}`);
 };
 
 export const getUnplannedStructures = profileFunction(

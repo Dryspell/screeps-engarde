@@ -2,7 +2,7 @@ import { getExits } from "buildings/utils";
 import { flatten } from "lodash";
 import { profileFunction } from "utils/screeps-profiler";
 
-const memorizeSpawnData = (spawn: StructureSpawn, exits: ReturnType<typeof getExits>) => {
+const memorizeSpawnData = (spawn: StructureSpawn) => {
   return {
     id: spawn.id,
     pos: spawn.pos
@@ -33,10 +33,11 @@ function memorizePaths(
   spawns: StructureSpawn[],
   controller: StructureController | undefined,
   sources: Source[],
-  minerals: Mineral<MineralConstant>[],
-  exits: ReturnType<typeof getExits>,
-  terrain = new Room.Terrain(room.name)
+  minerals: Mineral<MineralConstant>[]
 ) {
+  const exits = Memory.rooms[room.name].exits;
+  const terrain = Memory.rooms[room.name].terrain;
+
   const paths = [
     // Paths around Controller
     ...(controller
@@ -243,7 +244,8 @@ function memorizePaths(
   return paths;
 }
 
-const memorizeMinerPositions = (room: Room, sources: Source[], terrain = new Room.Terrain(room.name)) => {
+const memorizeMinerPositions = (room: Room, sources: Source[]) => {
+  const terrain = Memory.rooms[room.name].terrain;
   return flatten(
     sources.map(source =>
       [
@@ -272,36 +274,24 @@ export const memorizeRoom = profileFunction(
     structures = room.find(FIND_STRUCTURES),
     minerals = room.find(FIND_MINERALS)
   ) => {
-    if (refreshMemory) {
-      console.log(`[${Game.time.toLocaleString()}] Resetting memory for room ${room.name}`);
-    }
-
-    if (!Memory.rooms[room.name] || refreshMemory) {
-      const exits = getExits(room);
-      const terrain = new Room.Terrain(room.name);
-
-      Memory.rooms[room.name] = {
-        spawns: spawns.map(spawn => memorizeSpawnData(spawn, exits)),
-        sources: sources.map(source => memorizeSourceData(source)),
-        controller: memorizeControllerData(room),
-        minerals: minerals.map(mineral => memorizeMineralData(mineral)),
-        towers: structures
-          .filter(structure => structure.structureType === STRUCTURE_TOWER)
-          .map(tower => memorizeTowerData(tower as StructureTower)),
-        extensions: [],
-        containsHostiles: room.find(FIND_HOSTILE_CREEPS).length > 0,
-        exits,
-        paths: memorizePaths(room, spawns, controller, sources, minerals, exits),
-        minerPositions: memorizeMinerPositions(room, sources, terrain),
-        terrain,
-        lastMemorizedTick: Game.time,
-        cachedPaths: Memory.rooms?.[room.name]?.cachedPaths ?? {}
-      };
-    }
-
-    if (room.find(FIND_HOSTILE_CREEPS).length > 0) {
-      Memory.rooms[room.name].containsHostiles = true;
-    }
+    Memory.rooms ??= {};
+    //@ts-ignore
+    Memory.rooms[room.name] ??= {};
+    Memory.rooms[room.name].exits ??= getExits(room);
+    Memory.rooms[room.name].terrain ??= new Room.Terrain(room.name);
+    Memory.rooms[room.name].spawns ??= spawns.map(spawn => memorizeSpawnData(spawn));
+    Memory.rooms[room.name].sources ??= sources.map(source => memorizeSourceData(source));
+    Memory.rooms[room.name].controller ??= memorizeControllerData(room);
+    Memory.rooms[room.name].minerals ??= minerals.map(mineral => memorizeMineralData(mineral));
+    Memory.rooms[room.name].towers ??= structures
+      .filter(structure => structure.structureType === STRUCTURE_TOWER)
+      .map(tower => memorizeTowerData(tower as StructureTower));
+    Memory.rooms[room.name].extensions ??= [];
+    Memory.rooms[room.name].containsHostiles ??= room.find(FIND_HOSTILE_CREEPS).length > 0;
+    Memory.rooms[room.name].paths ??= memorizePaths(room, spawns, controller, sources, minerals);
+    Memory.rooms[room.name].minerPositions ??= memorizeMinerPositions(room, sources);
+    Memory.rooms[room.name].lastMemorizedTick ??= Game.time;
+    Memory.rooms[room.name].cachedPaths ??= {};
   },
   "memorizeRoom"
 );

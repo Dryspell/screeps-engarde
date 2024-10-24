@@ -8,11 +8,10 @@ const createRoadsForPaths = profileFunction(
     if (VISUALIZE_ONLY) return;
 
     Memory.rooms[room.name].paths.forEach(memorizedPath => {
+      if (memorizedPath.constructedRoad) return;
+
       const omitEnd = true;
-
       const roadResults = memorizedPath.path.map((pathStep, i, path) => {
-        if (memorizedPath.constructedRoad) return OK;
-
         if (i < (omitEnd ? path.length - 1 : path.length)) {
           return room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD);
         } else return OK;
@@ -190,7 +189,20 @@ export const planAndBuildExtensions = profileFunction(
 
     // if (VISUALIZE_ONLY) return;
 
-    if (extensions.length < MAX_ROOM_EXTENSIONS[(room.controller?.level ?? 0) as keyof typeof MAX_ROOM_EXTENSIONS]) {
+    const extensionConstructionSites = constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION);
+
+    if (
+      extensions.length + extensionConstructionSites.length <
+      MAX_ROOM_EXTENSIONS[(room.controller?.level ?? 0) as keyof typeof MAX_ROOM_EXTENSIONS]
+    ) {
+      console.log(
+        `[${Game.time.toLocaleString()}] ${room.name} has ${extensions.length} extensions, ${
+          extensionConstructionSites.length
+        } extension construction sites, and ${
+          MAX_ROOM_EXTENSIONS[(room.controller?.level ?? 0) as keyof typeof MAX_ROOM_EXTENSIONS]
+        } max extensions`
+      );
+
       buildExtensions(room, spawns, constructionSites, extensions, roomController);
     }
   },
@@ -261,7 +273,8 @@ export const architectRoom = profileFunction(
     constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES),
     structures = room.find(FIND_STRUCTURES)
   ) => {
-    const spawns = room.find(FIND_MY_SPAWNS);
+    const spawns = structures.filter(structure => structure.structureType === STRUCTURE_SPAWN) as StructureSpawn[];
+
     const roomController = room.controller;
 
     memorizeRoom(room, Game.time % 100 === 0, spawns, sources, roomController, structures);
@@ -274,7 +287,8 @@ export const architectRoom = profileFunction(
       !spawns.length &&
       room.controller &&
       room.controller.my &&
-      !constructionSites.filter(site => site.structureType === STRUCTURE_SPAWN).length
+      !constructionSites.filter(site => site.structureType === STRUCTURE_SPAWN).length &&
+      sources.length >= 2
     ) {
       // If there is no spawn and no spawn construction site, create a spawn construction site at the centroid of the sources and controller
 
@@ -325,13 +339,10 @@ const buildExtensions = profileFunction(
         (extA, extB) =>
           spawns[0].pos.getRangeTo(extA.pos.x, extA.pos.y) - spawns[0].pos.getRangeTo(extB.pos.x, extB.pos.y)
       )
-      .slice(
-        constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION).length + extensions.length,
-        MAX_ROOM_EXTENSIONS[roomController.level as keyof typeof MAX_ROOM_EXTENSIONS] + 1
-      )
       .forEach(ext => {
-        if (room.createConstructionSite(ext.pos.x, ext.pos.y, STRUCTURE_EXTENSION) === OK) {
-          console.log(`[${Game.time.toLocaleString()}] Building extension at ${ext.pos.x}, ${ext.pos.y}`);
+        const constructionResult = room.createConstructionSite(ext.pos.x, ext.pos.y, STRUCTURE_EXTENSION);
+        if (constructionResult === OK) {
+          console.log(`[${Game.time.toLocaleString()}] ${room.name} Building extension at ${ext.pos.x}, ${ext.pos.y}`);
           room.visual.text(`🏗️ Building Extension`, ext.pos.x + 1, ext.pos.y, {
             align: "left",
             opacity: 0.8
@@ -344,6 +355,12 @@ const buildExtensions = profileFunction(
           } else {
             Memory.rooms[room.name].extensions.push(ext);
           }
+        } else {
+          console.log(
+            `[${Game.time.toLocaleString()}] ${room.name} Error building extension at ${ext.pos.x}, ${
+              ext.pos.y
+            }: ${constructionResult}`
+          );
         }
       });
   },

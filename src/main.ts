@@ -101,10 +101,6 @@ export const loop = ErrorMapper.wrapLoop(() =>
     const spawns = Object.values(Game.spawns);
     const controlledRooms = Object.values(Game.rooms);
 
-    if (!Memory.rooms) {
-      Memory.rooms = {};
-    }
-
     controlledRooms.forEach(room => {
       const sources = room.find(FIND_SOURCES);
       const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
