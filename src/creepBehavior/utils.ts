@@ -1,4 +1,5 @@
-import { _hasPos } from "spatial-utils";
+import { DIRECTIONS } from "spatial/constants";
+import { _hasPos } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
@@ -14,6 +15,23 @@ export type EnergyTarget =
   | { type: "harvest"; base: Source }
   | { type: "pickup"; base: Resource<RESOURCE_ENERGY> }
   | { type: "withdraw"; base: StructureContainer | StructureStorage | Tombstone | Ruin };
+
+export type TransferTarget = {
+  type: "transfer";
+  base: AnyStoreStructure;
+};
+
+export type BuildTarget = {
+  type: "build";
+  base: ConstructionSite;
+};
+
+export type UpgradeTarget = {
+  type: "upgrade";
+  base: StructureController;
+};
+
+export type ActionableTarget = EnergyTarget | TransferTarget | BuildTarget | UpgradeTarget;
 
 export const getEnergyTargets = profileFunction(
   (
@@ -54,7 +72,7 @@ export const getEnergyTargets = profileFunction(
     }
     return energyTargets;
   },
-  "getEnergyTargets"
+  "spatial.getEnergyTargets"
 );
 
 const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
@@ -65,49 +83,63 @@ const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
       ? energyStore.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
       : true;
   });
-}, "getSafeEnergyStores");
+}, "spatial.getSafeEnergyStores");
 
-export const cachePathLength = profileFunction(
-  <T extends _hasPos>(
-    sourcePos: T,
-    store:
-      | EnergyTarget
-      | {
-          type: "transfer";
-          base: StructureExtension | StructureSpawn | StructureTower;
-        }
+export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, store: ActionableTarget) => {
+  if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
+    return 0;
+  }
+  if (!store.base.room) {
+    return 1000;
+  }
+
+  const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
+  store.base.room.memory.cachedPaths ??= {};
+  store.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
+  store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] ??= {};
+
+  if (!store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
+    const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
+    path.forEach((step, i) => {
+      if (!store.base.room) {
+        return;
+      }
+
+      if (!store.base.room.memory.cachedPaths[concatenatedPosition][step.x]) {
+        store.base.room.memory.cachedPaths[concatenatedPosition][step.x] = {};
+      }
+
+      store.base.room.memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
+    });
+    return path.length;
+  }
+
+  return store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
+}, "spatial.cachePathLength");
+
+export const moveToTargetByCachedPath = profileFunction(
+  (
+    creep: Creep,
+    target: ActionableTarget
+    // TODO: Add Visualization Options
   ) => {
-    if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
-      return 0;
-    }
-    if (!store.base.room) {
-      return 1000;
+    if (!target.base.room) {
+      return ERR_NO_PATH;
     }
 
-    const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
-    store.base.room.memory.cachedPaths ??= {};
-    store.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
-    store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] ??= {};
-
-    if (!store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
-      const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
-      path.forEach((step, i) => {
-        if (!store.base.room) {
-          return;
-        }
-
-        if (!store.base.room.memory.cachedPaths[concatenatedPosition][step.x]) {
-          store.base.room.memory.cachedPaths[concatenatedPosition][step.x] = {};
-        }
-
-        store.base.room.memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
-      });
-      return path.length;
+    const concatenatedPosition = `${target.base.pos.x}_${target.base.pos.y}`;
+    target.base.room.memory.cachedPaths ??= {};
+    target.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
+    target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x] ??= {};
+    if (!target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x][creep.pos.y]) {
+      cachePathLength(creep, target);
     }
 
-    return store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
+    let { shortestDistance, direction } = getShortestWalk(target, creep, concatenatedPosition);
+
+    return creep.move(direction[0]);
   },
-  "cachePathLength"
+  "spatial.moveToTargetByCachedPath"
 );
 
 export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
@@ -120,7 +152,7 @@ export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], cr
     .sort((a, b) => a.pathLength - b.pathLength);
 
   return sortedEnergyStores;
-}, "getNaiveSources");
+}, "spatial.getNaiveSources");
 
 export const findNaiveConstructionSite = profileFunction((constructionSites: ConstructionSite[], creep: Creep) => {
   const sitesByType = constructionSites.reduce((acc, site) => {
@@ -141,7 +173,7 @@ export const findNaiveConstructionSite = profileFunction((constructionSites: Con
   } else {
     return creep.pos.findClosestByPath(constructionSites) ?? constructionSites[0];
   }
-}, "findNaiveConstructionSite");
+}, "spatial.findNaiveConstructionSite");
 
 export const getNaiveTransferTargets = profileFunction(
   (creep: Creep, structures = creep.room.find(FIND_STRUCTURES)) => {
@@ -162,5 +194,35 @@ export const getNaiveTransferTargets = profileFunction(
 
     return targets;
   },
-  "getNaiveTransferTarget"
+  "spatial.getNaiveTransferTarget"
+);
+
+const getShortestWalk = profileFunction(
+  (
+    target: ActionableTarget,
+    creep: Creep,
+    concatenatedPosition: string = `${target.base.pos.x}_${target.base.pos.y}`
+  ) => {
+    let shortestDistance: number | undefined = undefined;
+    let direction = DIRECTIONS[0] as (typeof DIRECTIONS)[number];
+    for (const dir of DIRECTIONS) {
+      if (!target.base.room) {
+        break;
+      }
+
+      const distance =
+        target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x + dir[1][0]][creep.pos.y + dir[1][1]];
+
+      shortestDistance ??= distance;
+
+      if (distance < shortestDistance) {
+        shortestDistance = distance;
+        direction = dir;
+        break;
+      }
+    }
+
+    return { shortestDistance, direction };
+  },
+  "spatial.getShortestWalk"
 );

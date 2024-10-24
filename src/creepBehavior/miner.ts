@@ -1,6 +1,6 @@
 import { profileFunction } from "utils/screeps-profiler";
 import { getUnplannedStructures, switchState } from "./laborer";
-import { EnergyTarget, getNaiveSources, PATH_COLORS } from "./utils";
+import { EnergyTarget, getNaiveSources, moveToTargetByCachedPath, PATH_COLORS } from "./utils";
 
 const attemptToBuildCloseConstructionSites = (
   creep: Creep,

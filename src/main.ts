@@ -5,7 +5,7 @@ import { ROLES } from "creepBehavior/roles";
 import { getExits } from "buildings/utils";
 import { architectRoom, getPlannedRoadsSteps } from "architect";
 import { getUnplannedStructures } from "creepBehavior/laborer";
-import { kmeans } from "spatial-utils";
+import { kmeans } from "spatial/spatial-utils";
 import { cachePathLength, EnergyTarget, getEnergyTargets } from "creepBehavior/utils";
 import {
   type background,
@@ -92,9 +92,9 @@ export const loop = ErrorMapper.wrapLoop(() =>
       return;
     }
 
-    if (Game.time % 100 === 0) {
+    if (Game.time % 5 === 0) {
       console.log(`[${Game.time.toLocaleString()}] Profiling`);
-      Game.profiler.stream(20);
+      Game.profiler.stream(1);
     }
 
     const creeps = Object.values(Game.creeps);
@@ -173,45 +173,46 @@ function dispatchByEnergySource(
   tombstones: Tombstone[],
   unplannedStructures: AnyStructure[]
 ) {
-  // creeps.forEach(creep =>
-  //   ROLES[creep.memory.role].tick(
-  //     creep,
-  //     sources,
-  //     constructionSites,
-  //     droppedResources,
-  //     structures,
-  //     ruins,
-  //     tombstones,
-  //     unplannedStructures,
-  //     energyTargets
-  //   )
-  // );
+  creeps.forEach(creep =>
+    ROLES[creep.memory.role].tick(
+      creep,
+      sources,
+      constructionSites,
+      droppedResources,
+      structures,
+      ruins,
+      tombstones,
+      unplannedStructures,
+      energyTargets,
+      energyTargets
+    )
+  );
 
-  const creepClusters = kmeans(energyTargets.length, creeps);
+  // const creepClusters = kmeans(energyTargets.length, creeps);
 
-  const sourcesByCluster = energyTargets.map(energyTarget => {
-    return {
-      energyTarget,
-      creepCluster: creepClusters
-        .sort((a, b) => cachePathLength(a.centroid, energyTarget) - cachePathLength(b.centroid, energyTarget))
-        .shift()
-    };
-  });
+  // const sourcesByCluster = energyTargets.map(energyTarget => {
+  //   return {
+  //     energyTarget,
+  //     creepCluster: creepClusters
+  //       .sort((a, b) => cachePathLength(a.centroid, energyTarget) - cachePathLength(b.centroid, energyTarget))
+  //       .shift()
+  //   };
+  // });
 
-  sourcesByCluster.forEach(sbc => {
-    sbc.creepCluster?.cluster.forEach(creep => {
-      ROLES[creep.memory.role].tick(
-        creep,
-        sources,
-        constructionSites,
-        droppedResources,
-        structures,
-        ruins,
-        tombstones,
-        unplannedStructures,
-        energyTargets,
-        [sbc.energyTarget]
-      );
-    });
-  });
+  // sourcesByCluster.forEach(sbc => {
+  //   sbc.creepCluster?.cluster.forEach(creep => {
+  //     ROLES[creep.memory.role].tick(
+  //       creep,
+  //       sources,
+  //       constructionSites,
+  //       droppedResources,
+  //       structures,
+  //       ruins,
+  //       tombstones,
+  //       unplannedStructures,
+  //       energyTargets,
+  //       [sbc.energyTarget]
+  //     );
+  //   });
+  // });
 }

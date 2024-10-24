@@ -1,0 +1,10 @@
+export const DIRECTIONS = [
+  [TOP, [0, -1]] as const,
+  [TOP_RIGHT, [1, -1]] as const,
+  [RIGHT, [1, 0]] as const,
+  [BOTTOM_RIGHT, [1, 1]] as const,
+  [BOTTOM, [0, 1]] as const,
+  [BOTTOM_LEFT, [-1, 1]] as const,
+  [LEFT, [-1, 0]] as const,
+  [TOP_LEFT, [-1, -1]] as const
+] as [DirectionConstant, [number, number]][];

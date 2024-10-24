@@ -4,6 +4,7 @@ import {
   findNaiveConstructionSite,
   getNaiveSources as getNaiveSources,
   getNaiveTransferTargets,
+  moveToTargetByCachedPath,
   PATH_COLORS
 } from "./utils";
 import { profileFunction } from "utils/screeps-profiler";
@@ -37,9 +38,16 @@ export const getUnplannedStructures = profileFunction(
     //   // return;
     // }
 
-    const unplannedStructures = extensions.filter(
-      structure => !plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
+    const unplannedStructures = extensions.filter(structure =>
+      plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
     );
+    if (unplannedStructures.length) {
+      unplannedStructures.forEach(structure => {
+        // console.log(`[${Game.time.toLocaleString()}]: Unplanned structure found at ${structure.pos}`);
+        room.visual.text("X!", structure.pos.x, structure.pos.y, { color: "red" });
+      });
+    }
+
     return unplannedStructures as AnyStructure[];
   },
   "getUnplannedStructures"
