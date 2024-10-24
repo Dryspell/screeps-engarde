@@ -62,15 +62,10 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
         continue;
       }
 
-      const newBody =
-        "body" in role
-          ? generateBody(spawn.room.energyAvailable, role.body)
-          : role.generateBody(spawn);
+      const newBody = "body" in role ? generateBody(spawn.room.energyAvailable, role.body) : role.generateBody(spawn);
 
       const bestBody =
-        "body" in role
-          ? generateBody(spawn.room.energyCapacityAvailable, role.body)
-          : role.generateBody(spawn);
+        "body" in role ? generateBody(spawn.room.energyCapacityAvailable, role.body) : role.generateBody(spawn);
 
       if (creepsInRoom.length && newBody.length < bestBody.length) {
         continue;
@@ -81,6 +76,9 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
           memory: { role: roleName, room: spawn.room.name, spawn: spawn.name }
         }) === OK
       ) {
+        console.log(
+          `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Energy Production: ${production}/${energyPotential}`
+        );
         console.log(
           `[${Game.time.toLocaleString()}] Room ${spawn.room.name}: Spawning new ${roleName} with body: [${newBody.join(
             ", "

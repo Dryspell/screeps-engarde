@@ -3,50 +3,34 @@ import { flatten } from "lodash";
 import { memorizeRoom } from "memorizeRoom";
 import { profileFunction } from "utils/screeps-profiler";
 
-const VISUALIZE_PATHS = true;
-const VISUALIZE_EXTENSIONS = true;
-const VISUALIZE_TOWERS = true;
-const VISUALIZE_CONTAINERS = true;
-const VISUALIZE_WALLS = true;
-
-const visualizePath = (room: Room, path: PathStep[] | null) => {
-  if (!path) return;
-
-  if (VISUALIZE_PATHS) {
-    room.visual.poly(
-      path.map(p => [p.x, p.y]),
-      { stroke: "red" }
-    );
-  }
-};
-
-const createRoadsForPaths = profileFunction((room: Room, VISUALIZE_ONLY = true) => {
-  Memory.rooms[room.name].paths.forEach(memorizedPath => {
-    visualizePath(room, memorizedPath.path);
-
+const createRoadsForPaths = profileFunction(
+  (room: Room, plannedRoads = getPlannedRoadsSteps(room), VISUALIZE_ONLY = true) => {
     if (VISUALIZE_ONLY) return;
 
-    const omitEnd = true;
+    Memory.rooms[room.name].paths.forEach(memorizedPath => {
+      const omitEnd = true;
 
-    const roadResults = memorizedPath.path.map((pathStep, i, path) => {
-      if (memorizedPath.constructedRoad) return OK;
+      const roadResults = memorizedPath.path.map((pathStep, i, path) => {
+        if (memorizedPath.constructedRoad) return OK;
 
-      if (i < (omitEnd ? path.length - 1 : path.length)) {
-        return room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD);
-      } else return OK;
+        if (i < (omitEnd ? path.length - 1 : path.length)) {
+          return room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD);
+        } else return OK;
+      });
+      if (roadResults.every(result => result === OK || result === ERR_INVALID_TARGET)) {
+        memorizedPath.constructedRoad = true;
+      } else {
+        // console.log(
+        //   `[${Game.time.toLocaleString()}] Error building roads to source ${memorizedPath.targetId}, errors: ${roadResults
+        //     .filter(Boolean)
+        //     .join(", ")}`
+        // );
+      }
+      return roadResults;
     });
-    if (roadResults.every(result => result === OK || result === ERR_INVALID_TARGET)) {
-      memorizedPath.constructedRoad = true;
-    } else {
-      // console.log(
-      //   `[${Game.time.toLocaleString()}] Error building roads to source ${memorizedPath.targetId}, errors: ${roadResults
-      //     .filter(Boolean)
-      //     .join(", ")}`
-      // );
-    }
-    return roadResults;
-  });
-}, "architect.createRoadsForPaths");
+  },
+  "architect.roads.createRoadsForPaths"
+);
 
 export const getPlannedRoadsSteps = profileFunction((room: Room) => {
   return flatten(Memory.rooms[room.name].paths.map(memorizedPath => memorizedPath.path));
@@ -65,12 +49,6 @@ const planAndBuildTowers = profileFunction(
     plannedRoads = getPlannedRoadsSteps(room),
     VISUALIZE_ONLY = true
   ) => {
-    if (VISUALIZE_TOWERS) {
-      Memory.rooms[room.name].towers.forEach(tower => {
-        room.visual.circle(tower.pos.x, tower.pos.y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
-      });
-    }
-
     if (VISUALIZE_ONLY) {
       return;
     }
@@ -148,14 +126,6 @@ const planAndBuildTowers = profileFunction(
         }
       });
 
-      if (VISUALIZE_TOWERS) {
-        freeSpaceAroundCentroid.forEach(([x, y]) => {
-          room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
-        });
-      }
-
-      if (VISUALIZE_ONLY) return;
-
       freeSpaceAroundCentroid
         .slice(constructionSites.filter(site => site.structureType === STRUCTURE_TOWER).length + towers.length, 1)
         .forEach(([x, y]) => {
@@ -168,14 +138,8 @@ const planAndBuildTowers = profileFunction(
           }
         });
     }
-
-    if (VISUALIZE_TOWERS) {
-      Memory.rooms[room.name].towers.forEach(tower => {
-        room.visual.circle(tower.pos.x, tower.pos.y, { fill: "transparent", radius: 0.5, stroke: "magenta" });
-      });
-    }
   },
-  "architect.planAndBuildTowers"
+  "architect.towers.planAndBuildTowers"
 );
 
 export const getExistingExtensions = profileFunction(
@@ -201,7 +165,7 @@ export const getExistingExtensions = profileFunction(
         }))
     ]);
   },
-  "getExistingExtensions"
+  "architect.extensions.getExistingExtensions"
 );
 
 export const planAndBuildExtensions = profileFunction(
@@ -216,107 +180,21 @@ export const planAndBuildExtensions = profileFunction(
     plannedRoads = getPlannedRoadsSteps(room),
     VISUALIZE_ONLY = true
   ) => {
-    // console.log(`[${Game.time.toLocaleString()}] Room ${room.name} has ${extensions.length} extensions`);
-
-    if (VISUALIZE_EXTENSIONS) {
-      Memory.rooms[room.name].extensions.forEach(extension => {
-        room.visual.circle(extension.pos.x, extension.pos.y, { fill: "transparent", radius: 0.5, stroke: "green" });
-      });
-    }
-
-    if (VISUALIZE_ONLY) return;
-
     if (!Memory.rooms[room.name].extensions?.length || !extensions.length) {
       Memory.rooms[room.name].extensions = getExistingExtensions(room, constructionSites, extensions);
     }
 
     if (Memory.rooms[room.name].extensions.length < MAX_ROOM_EXTENSIONS[8]) {
-      const roomExtensionSpace = Math.ceil(Math.sqrt(MAX_ROOM_EXTENSIONS[8])) + 1;
-
-      const spaceAroundSpawn = Array.from({ length: roomExtensionSpace ** 2 }, (_, i) => i).map(i => {
-        const x = spawns[0].pos.x + (i % roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
-        const y = spawns[0].pos.y + Math.floor(i / roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
-        return [x, y] as [x: number, y: number];
-      });
-
-      const structuresAroundSpawn = room
-        .lookAtArea(
-          spawns[0].pos.y - Math.floor(roomExtensionSpace / 2),
-          spawns[0].pos.x - Math.floor(roomExtensionSpace / 2),
-          spawns[0].pos.y + Math.floor(roomExtensionSpace / 2),
-          spawns[0].pos.x + Math.floor(roomExtensionSpace / 2),
-          true
-        )
-        .filter(
-          lookResult =>
-            lookResult.type !== "creep" &&
-            lookResult.type !== "tombstone" &&
-            !(lookResult.type === "terrain" && (lookResult.terrain === "swamp" || lookResult.terrain === "plain")) &&
-            lookResult.type !== "ruin"
-        )
-        .map(({ x, y }) => ({ x, y }))
-        .concat(constructionSites.map(({ pos }) => ({ x: pos.x, y: pos.y })))
-        .concat(plannedRoads)
-        .concat(Memory.rooms[room.name].towers.map(tower => ({ x: tower.pos.x, y: tower.pos.y })));
-
-      const freeSpaceAroundSpawn = spaceAroundSpawn.filter(
-        ([x, y]) => !structuresAroundSpawn.some(lookObject => lookObject.x === x && lookObject.y === y)
-      );
-
-      // console.log(
-      //   `[${Game.time.toLocaleString()}] Room ${room.name} has ${freeSpaceAroundSpawn.length} free spaces for extensions`
-      // );
-
-      // Memorize the free space around the spawn as planned extensions
-      freeSpaceAroundSpawn.forEach(([x, y]) => {
-        if (!Memory.rooms[room.name].extensions.some(extension => extension.pos.x === x && extension.pos.y === y)) {
-          Memory.rooms[room.name].extensions.push({
-            id: extensions.find(extension => extension.pos.x === x && extension.pos.y === y)?.id ?? "",
-            pos: new RoomPosition(x, y, room.name),
-            planned: true
-          });
-        }
-      });
-
-      freeSpaceAroundSpawn
-        .sort(
-          (spaceA, spaceB) =>
-            spawns[0].pos.getRangeTo(spaceA[0], spaceA[1]) - spawns[0].pos.getRangeTo(spaceB[0], spaceB[1])
-        )
-        .slice(
-          constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION).length + extensions.length,
-          MAX_ROOM_EXTENSIONS[roomController.level as keyof typeof MAX_ROOM_EXTENSIONS] + 1
-        )
-        .forEach(([x, y]) => {
-          if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
-            console.log(`[${Game.time.toLocaleString()}] Building extension at ${x}, ${y}`);
-            room.visual.text(`🏗️ Building Extension`, x + 1, y, {
-              align: "left",
-              opacity: 0.8
-            });
-            const existingMemorizedExtension = Memory.rooms[room.name].extensions.find(
-              extension => extension.pos.x === x && extension.pos.y === y
-            );
-            if (existingMemorizedExtension) {
-              existingMemorizedExtension.planned = true;
-            } else {
-              Memory.rooms[room.name].extensions.push({
-                id: extensions.find(extension => extension.pos.x === x && extension.pos.y === y)?.id ?? "",
-                pos: new RoomPosition(x, y, room.name),
-                planned: true
-              });
-            }
-          }
-        });
+      planExtensions(spawns, room, constructionSites, plannedRoads, extensions);
     }
 
-    if (VISUALIZE_EXTENSIONS) {
-      Memory.rooms[room.name].extensions.forEach(extension => {
-        room.visual.circle(extension.pos.x, extension.pos.y, { fill: "transparent", radius: 0.5, stroke: "green" });
-      });
+    // if (VISUALIZE_ONLY) return;
+
+    if (extensions.length < MAX_ROOM_EXTENSIONS[(room.controller?.level ?? 0) as keyof typeof MAX_ROOM_EXTENSIONS]) {
+      buildExtensions(room, spawns, constructionSites, extensions, roomController);
     }
   },
-  "architect.planAndBuildExtensions"
+  "architect.extensions.planAndBuildExtensions"
 );
 
 const constructSpawn = profileFunction((room: Room, roomController: StructureController, roomSources: Source[]) => {
@@ -333,7 +211,7 @@ const constructSpawn = profileFunction((room: Room, roomController: StructureCon
       opacity: 0.8
     });
   }
-}, "architect.constructSpawn");
+}, "architect.spawns.constructSpawn");
 
 const MAX_CONTAINERS_IN_ROOM = 5;
 
@@ -345,13 +223,9 @@ const planAndBuildContainers = profileFunction(
     structures: Structure<StructureConstant>[],
     VISUALIZE_ONLY = true
   ) => {
-    if (VISUALIZE_CONTAINERS) {
-      Memory.rooms[room.name].minerPositions.forEach(({ x, y }) => {
-        room.visual.circle(x, y, { fill: "transparent", radius: 0.5, stroke: "yellow" });
-      });
+    if (VISUALIZE_ONLY) {
+      return;
     }
-
-    if (VISUALIZE_ONLY) return;
 
     const containers = [
       ...(structures.filter(structure => structure.structureType === STRUCTURE_CONTAINER) as StructureContainer[]),
@@ -375,7 +249,7 @@ const planAndBuildContainers = profileFunction(
       }
     }
   },
-  "architect.planAndBuildContainers"
+  "architect.containers.planAndBuildContainers"
 );
 
 const planAndBuildWalls = (room: Room, spawn: StructureSpawn, roomController: StructureController) => {};
@@ -408,7 +282,7 @@ export const architectRoom = profileFunction(
       return;
     }
 
-    planAndBuildContainers(room, spawns, constructionSites, structures, Game.time % 100 === 0);
+    planAndBuildContainers(room, spawns, constructionSites, structures, Boolean(Game.time % 100));
 
     const plannedRoads = getPlannedRoadsSteps(room);
     planAndBuildTowers(
@@ -419,7 +293,7 @@ export const architectRoom = profileFunction(
       constructionSites,
       structures.filter(structure => structure.structureType === STRUCTURE_TOWER) as StructureTower[],
       plannedRoads,
-      Game.time % 100 === 0
+      Boolean(Game.time % 100)
     );
 
     planAndBuildExtensions(
@@ -429,11 +303,106 @@ export const architectRoom = profileFunction(
       constructionSites,
       structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION) as StructureExtension[],
       plannedRoads,
-      Game.time % 100 === 0
+      Boolean(Game.time % 100)
     );
 
-    Game.time % 100 === 0 && createRoadsForPaths(room, Game.time % 100 === 0);
+    createRoadsForPaths(room, plannedRoads, Boolean(Game.time % 100));
     // planAndBuildWalls(room, spawn, roomController);
   },
-  "architectRoom"
+  "architect.architectRoom"
+);
+
+const buildExtensions = profileFunction(
+  (
+    room: Room,
+    spawns: StructureSpawn[],
+    constructionSites: ConstructionSite<BuildableStructureConstant>[],
+    extensions: StructureExtension[],
+    roomController: StructureController
+  ) => {
+    Memory.rooms[room.name].extensions
+      .sort(
+        (extA, extB) =>
+          spawns[0].pos.getRangeTo(extA.pos.x, extA.pos.y) - spawns[0].pos.getRangeTo(extB.pos.x, extB.pos.y)
+      )
+      .slice(
+        constructionSites.filter(site => site.structureType === STRUCTURE_EXTENSION).length + extensions.length,
+        MAX_ROOM_EXTENSIONS[roomController.level as keyof typeof MAX_ROOM_EXTENSIONS] + 1
+      )
+      .forEach(ext => {
+        if (room.createConstructionSite(ext.pos.x, ext.pos.y, STRUCTURE_EXTENSION) === OK) {
+          console.log(`[${Game.time.toLocaleString()}] Building extension at ${ext.pos.x}, ${ext.pos.y}`);
+          room.visual.text(`🏗️ Building Extension`, ext.pos.x + 1, ext.pos.y, {
+            align: "left",
+            opacity: 0.8
+          });
+          const existingMemorizedExtension = Memory.rooms[room.name].extensions.find(
+            extension => extension.pos.x === ext.pos.x && extension.pos.y === ext.pos.y
+          );
+          if (existingMemorizedExtension) {
+            existingMemorizedExtension.planned = true;
+          } else {
+            Memory.rooms[room.name].extensions.push(ext);
+          }
+        }
+      });
+  },
+  "architect.extensions.buildExtensions"
+);
+
+const planExtensions = profileFunction(
+  (
+    spawns: StructureSpawn[],
+    room: Room,
+    constructionSites: ConstructionSite<BuildableStructureConstant>[],
+    plannedRoads: PathStep[],
+    extensions: StructureExtension[]
+  ) => {
+    const roomExtensionSpace = Math.ceil(Math.sqrt(MAX_ROOM_EXTENSIONS[8])) + 5;
+
+    const spaceAroundSpawn = Array.from({ length: roomExtensionSpace ** 2 }, (_, i) => i).map(i => {
+      const x = spawns[0].pos.x + (i % roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
+      const y = spawns[0].pos.y + Math.floor(i / roomExtensionSpace) - Math.floor(roomExtensionSpace / 2);
+      return [x, y] as [x: number, y: number];
+    });
+
+    const structuresAroundSpawn = room
+      .lookAtArea(
+        spawns[0].pos.y - Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.x - Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.y + Math.floor(roomExtensionSpace / 2),
+        spawns[0].pos.x + Math.floor(roomExtensionSpace / 2),
+        true
+      )
+      .filter(
+        lookResult =>
+          lookResult.type !== "creep" &&
+          lookResult.type !== "tombstone" &&
+          !(lookResult.type === "terrain" && (lookResult.terrain === "swamp" || lookResult.terrain === "plain")) &&
+          lookResult.type !== "ruin"
+      )
+      .map(({ x, y }) => ({ x, y }))
+      .concat(constructionSites.map(({ pos }) => ({ x: pos.x, y: pos.y })))
+      .concat(plannedRoads)
+      .concat(Memory.rooms[room.name].towers.map(tower => ({ x: tower.pos.x, y: tower.pos.y })));
+
+    const freeSpaceAroundSpawn = spaceAroundSpawn.filter(
+      ([x, y]) => !structuresAroundSpawn.some(lookObject => lookObject.x === x && lookObject.y === y)
+    );
+
+    // console.log(
+    //   `[${Game.time.toLocaleString()}] Room ${room.name} has ${freeSpaceAroundSpawn.length} free spaces for extensions`
+    // );
+    // Memorize the free space around the spawn as planned extensions
+    freeSpaceAroundSpawn.forEach(([x, y]) => {
+      if (!Memory.rooms[room.name].extensions.some(extension => extension.pos.x === x && extension.pos.y === y)) {
+        Memory.rooms[room.name].extensions.push({
+          id: extensions.find(extension => extension.pos.x === x && extension.pos.y === y)?.id ?? "",
+          pos: new RoomPosition(x, y, room.name),
+          planned: true
+        });
+      }
+    });
+  },
+  "architect.extensions.planExtensions"
 );

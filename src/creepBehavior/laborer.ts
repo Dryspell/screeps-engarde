@@ -1,5 +1,11 @@
 import { getExistingExtensions, getPlannedRoadsSteps } from "architect";
-import { EnergyTarget, findNaiveConstructionSite, getNaiveSources as getNaiveSources, PATH_COLORS } from "./utils";
+import {
+  EnergyTarget,
+  findNaiveConstructionSite,
+  getNaiveSources as getNaiveSources,
+  getNaiveTransferTargets,
+  PATH_COLORS
+} from "./utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
@@ -10,28 +16,34 @@ export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   console.log(`[${Game.time.toLocaleString()}]: ${creep.name} Switching to ${newState}`);
 };
 
-export const getUnplannedStructures = profileFunction((room: Room, structures = room.find(FIND_STRUCTURES)) => {
-  // If there is a building that is unplanned, dismantle it
-  const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
+export const getUnplannedStructures = profileFunction(
+  (room: Room, structures = room.find(FIND_STRUCTURES), plannedRoadSteps = getPlannedRoadsSteps(room)) => {
+    // If there is a building that is unplanned, dismantle it
+    const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
 
-  const plannedExtensions = Memory.rooms[room.name].extensions
-    .filter(struct => struct.planned === true)
-    .map(extension => `${extension.pos.x}_${extension.pos.y}`);
+    // const plannedExtensions = Memory.rooms[room.name].extensions
+    //   .filter(struct => struct.planned === true)
+    //   .map(extension => `${extension.pos.x}_${extension.pos.y}`);
 
-  const plannedRoads = getPlannedRoadsSteps(room).map(road => `${road.x}_${road.y}`);
+    if (!plannedRoadSteps.length) {
+      return extensions as AnyStructure[];
+    }
 
-  if (plannedExtensions.some(extension => plannedRoads.includes(extension))) {
-    console.log(`Unexpected overlap between planned extensions and roads`);
-    console.log(`Recomputing planned extensions`);
-    Memory.rooms[room.name].extensions = getExistingExtensions(room);
-    // return;
-  }
+    const plannedRoads = plannedRoadSteps.map(road => `${road.x}_${road.y}`);
+    // if (extensions.some(extension => plannedRoads.includes(`${extension.pos.x}_${extension.pos.y}`))) {
+    //   console.log(`Unexpected overlap between planned extensions and roads`);
+    //   console.log(`Recomputing planned extensions`);
+    //   Memory.rooms[room.name].extensions = getExistingExtensions(room);
+    //   // return;
+    // }
 
-  const unplannedStructures = extensions.filter(
-    structure => !plannedExtensions.includes(`${structure.pos.x}_${structure.pos.y}`)
-  );
-  return unplannedStructures as AnyStructure[];
-}, "getUnplannedStructures");
+    const unplannedStructures = extensions.filter(
+      structure => !plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
+    );
+    return unplannedStructures as AnyStructure[];
+  },
+  "getUnplannedStructures"
+);
 
 export const laborerTick = profileFunction(
   (
@@ -45,7 +57,8 @@ export const laborerTick = profileFunction(
     ruins = creep.room.find(FIND_RUINS),
     tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),
-    energyTargets: EnergyTarget[]
+    energyTargets: EnergyTarget[],
+    primaryEnergyTargets: EnergyTarget[]
   ) => {
     if (
       !creep.memory.state ||
@@ -107,6 +120,67 @@ export const laborerTick = profileFunction(
         break;
       }
       case "harvesting": {
+        for (const energyTarget of energyTargets) {
+          if (energyTarget.type === "harvest" && creep.harvest(energyTarget.base) === OK) {
+            creep.memory.target = energyTarget.base.id;
+            return;
+          } else if (energyTarget.type === "pickup" && creep.pickup(energyTarget.base) === OK) {
+            creep.memory.target = energyTarget.base.id;
+            return;
+          } else if (energyTarget.type === "withdraw" && creep.withdraw(energyTarget.base, RESOURCE_ENERGY) === OK) {
+            creep.memory.target = energyTarget.base.id;
+            return;
+          }
+        }
+
+        const naivestPrimaryTargets = getNaiveSources(primaryEnergyTargets, creep);
+
+        if (!naivestPrimaryTargets.length) {
+          console.log(
+            `[${Game.time.toLocaleString()}]: ${creep.name} in room ${
+              creep.room.name
+            }; No naive energy source found, ${energyTargets
+              .map(
+                target =>
+                  `${target.type}: (${target.base.pos.x}, ${target.base.pos.y}) ${
+                    target.type === "withdraw" ? target.base.store.getUsedCapacity(RESOURCE_ENERGY) : "UNKNOWN"
+                  }`
+              )
+              .join(" | ")}`
+          );
+          naivestPrimaryTargets.push(
+            ...getNaiveSources(
+              sources.map(source => ({ type: "harvest" as const, base: source })),
+              creep
+            )
+          );
+        }
+
+        for (const target of naivestPrimaryTargets) {
+          if (
+            target.type === "harvest" &&
+            creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
+            creep.memory.target = target.base.id;
+          } else if (
+            target.type === "pickup" &&
+            creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
+            creep.memory.target = target.base.id;
+          } else if (
+            target.type === "withdraw" &&
+            creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+          ) {
+            creep.memory.target = target.base.id;
+          }
+
+          // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
+          return;
+        }
+
         const naivestSources = getNaiveSources(energyTargets, creep);
 
         if (!naivestSources.length) {
@@ -130,25 +204,25 @@ export const laborerTick = profileFunction(
           );
         }
 
-        for (const source of naivestSources) {
+        for (const target of naivestSources) {
           if (
-            source.type === "harvest" &&
-            creep.harvest(source.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            target.type === "harvest" &&
+            creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
           ) {
-            creep.memory.target = source.base.id;
+            creep.memory.target = target.base.id;
           } else if (
-            source.type === "pickup" &&
-            creep.pickup(source.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            target.type === "pickup" &&
+            creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
           ) {
-            creep.memory.target = source.base.id;
+            creep.memory.target = target.base.id;
           } else if (
-            source.type === "withdraw" &&
-            creep.withdraw(source.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(source.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            target.type === "withdraw" &&
+            creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
+            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
           ) {
-            creep.memory.target = source.base.id;
+            creep.memory.target = target.base.id;
           }
 
           // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
@@ -157,21 +231,18 @@ export const laborerTick = profileFunction(
       }
 
       case "transferring": {
-        const target = creep.room.find(FIND_STRUCTURES, {
-          filter: structure => {
-            return (
-              (structure.structureType === STRUCTURE_EXTENSION || structure.structureType === STRUCTURE_SPAWN) &&
-              structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-            );
-          }
-        })[0];
+        const targets = getNaiveTransferTargets(creep, structures);
 
-        const transferResult = creep.transfer(target, RESOURCE_ENERGY);
-        if (transferResult === ERR_NOT_IN_RANGE) {
-          creep.memory.target = target.id;
-          creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
-        } else if (transferResult !== OK) {
-          console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
+        for (const target of targets) {
+          const transferResult = creep.transfer(target, RESOURCE_ENERGY);
+          if (transferResult === ERR_NOT_IN_RANGE) {
+            creep.memory.target = target.id;
+            creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+            return;
+          } else if (transferResult !== OK) {
+            console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
+            return;
+          }
         }
 
         break;

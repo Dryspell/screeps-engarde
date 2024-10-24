@@ -3,7 +3,7 @@ import { handleSpawning } from "spawning/spawning";
 import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits } from "buildings/utils";
-import { architectRoom } from "architect";
+import { architectRoom, getPlannedRoadsSteps } from "architect";
 import { getUnplannedStructures } from "creepBehavior/laborer";
 import { kmeans } from "spatial-utils";
 import { cachePathLength, EnergyTarget, getEnergyTargets } from "creepBehavior/utils";
@@ -18,6 +18,7 @@ import {
   type restart,
   type stream
 } from "utils/screeps-profiler";
+import { visualize } from "visual";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -42,13 +43,13 @@ declare global {
     minerPositions: { x: number; y: number }[];
     terrain: RoomTerrain;
     lastMemorizedTick: typeof Game.time;
+    cachedPaths: { [sourcePos: string]: { [x: number]: { [y: number]: number } } };
   }
 
   interface Memory {
     uuid: number;
     log: any;
     rooms: { [roomName: string]: RoomMemory };
-    cachedPaths: { [sourcePos: string]: number[][] };
   }
 
   interface CreepMemory {
@@ -86,7 +87,7 @@ export const loop = ErrorMapper.wrapLoop(() =>
   profilerWrap(() => {
     // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
 
-    if (Game.cpu.bucket < 100) {
+    if (Game.cpu.bucket < 500) {
       Game.time % 20 === 0 && console.log(`Bucket is low: ${Game.cpu.bucket}`);
       return;
     }
@@ -113,6 +114,9 @@ export const loop = ErrorMapper.wrapLoop(() =>
       const structures = room.find(FIND_STRUCTURES);
 
       architectRoom(room, sources, constructionSites, structures);
+      // const plannedRoadSteps = getPlannedRoadsSteps(room);
+
+      visualize(room);
 
       const ruins = room.find(FIND_RUINS);
       const tombstones = room.find(FIND_TOMBSTONES);
@@ -209,6 +213,7 @@ function dispatchByEnergySource(
         ruins,
         tombstones,
         unplannedStructures,
+        energyTargets,
         [sbc.energyTarget]
       );
     });

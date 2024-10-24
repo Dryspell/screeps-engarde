@@ -32,7 +32,8 @@ export const minerTick = profileFunction(
     ruins = creep.room.find(FIND_RUINS),
     tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),
-    energyTargets: EnergyTarget[]
+    energyTargets: EnergyTarget[],
+    primaryEnergyTargets: EnergyTarget[]
   ) => {
     switchState(creep, "harvesting");
 

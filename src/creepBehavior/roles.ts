@@ -40,7 +40,14 @@ export const ROLES = {
     body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
     max: 6,
     tick: laborerTick,
-    spawnCondition: (room: Room) => true
+    spawnCondition: (room: Room, creeps: Creep[]) => {
+      const laborersInRoom = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
+      return (
+        (Memory.rooms[room.name].minerPositions?.length &&
+          laborersInRoom.length < Memory.rooms[room.name].minerPositions?.length) ||
+        laborersInRoom.length < 1
+      );
+    }
   },
   claimer: {
     body: [CLAIM, MOVE] satisfies BodyPartConstant[],

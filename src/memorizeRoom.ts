@@ -154,7 +154,9 @@ function memorizePaths(
     // Paths from Controller to Sources
     ...(controller
       ? sources.map(source => ({
-          path: source.pos.findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) }),
+          path: source.pos
+            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .slice(0, -1),
           constructedRoad: false
         }))
       : [])
@@ -169,7 +171,9 @@ function memorizePaths(
           });
           return {
             path: closestExit
-              ? controller.pos.findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+              ? controller.pos
+                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+                  .slice(0, -1)
               : [],
             constructedRoad: false
           };
@@ -185,7 +189,9 @@ function memorizePaths(
           const closestExit = spawn.pos.findClosestByPath(spawn.room.find(exit.exitDirection), { ignoreCreeps: true });
           return {
             path: closestExit
-              ? spawn.pos.findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+              ? spawn.pos
+                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+                  .slice(0, -1)
               : [],
             constructedRoad: false
           };
@@ -198,7 +204,9 @@ function memorizePaths(
     // Paths from Spawns to Controller
     ...(controller
       ? spawns.map(spawn => ({
-          path: spawn.pos.findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) }),
+          path: spawn.pos
+            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .slice(0, -1),
           constructedRoad: false
         }))
       : [])
@@ -209,7 +217,9 @@ function memorizePaths(
     ...flatten(
       spawns.map(spawn =>
         sources.map(source => ({
-          path: spawn.pos.findPathTo(source.pos, { ignoreCreeps: true, costCallback: costCallback(paths) }),
+          path: spawn.pos
+            .findPathTo(source.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .slice(0, -1),
           constructedRoad: false
         }))
       )
@@ -221,7 +231,9 @@ function memorizePaths(
     ...flatten(
       spawns.map(spawn =>
         minerals.map(mineral => ({
-          path: spawn.pos.findPathTo(mineral.pos, { ignoreCreeps: true, costCallback: costCallback(paths) }),
+          path: spawn.pos
+            .findPathTo(mineral.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .slice(0, -1),
           constructedRoad: false
         }))
       )
@@ -282,7 +294,8 @@ export const memorizeRoom = profileFunction(
         paths: memorizePaths(room, spawns, controller, sources, minerals, exits),
         minerPositions: memorizeMinerPositions(room, sources, terrain),
         terrain,
-        lastMemorizedTick: Game.time
+        lastMemorizedTick: Game.time,
+        cachedPaths: Memory.rooms?.[room.name]?.cachedPaths ?? {}
       };
     }
 

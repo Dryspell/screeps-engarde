@@ -3,7 +3,7 @@ import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
   harvesting: "#ffaa00",
-  transferring: "#ffffff",
+  transferring: "#00FFFF",
   building: "##00FF00",
   upgrading: "#0000FF",
   claiming: "#FF0000",
@@ -67,35 +67,48 @@ const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
   });
 }, "getSafeEnergyStores");
 
-export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, store: EnergyTarget) => {
-  if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
-    return 0;
-  }
+export const cachePathLength = profileFunction(
+  <T extends _hasPos>(
+    sourcePos: T,
+    store:
+      | EnergyTarget
+      | {
+          type: "transfer";
+          base: StructureExtension | StructureSpawn | StructureTower;
+        }
+  ) => {
+    if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
+      return 0;
+    }
+    if (!store.base.room) {
+      return 1000;
+    }
 
-  const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
-  if (!Memory.cachedPaths) {
-    Memory.cachedPaths = {};
-  }
-  if (!Memory.cachedPaths[concatenatedPosition]) {
-    Memory.cachedPaths[concatenatedPosition] = [];
-  }
-  if (!Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x]) {
-    Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] = [];
-  }
-  if (!Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
-    const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
-    path.forEach((step, i) => {
-      if (!Memory.cachedPaths[concatenatedPosition][step.x]) {
-        Memory.cachedPaths[concatenatedPosition][step.x] = [];
-      }
+    const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
+    store.base.room.memory.cachedPaths ??= {};
+    store.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
+    store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] ??= {};
 
-      Memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
-    });
-    return path.length;
-  }
+    if (!store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
+      const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
+      path.forEach((step, i) => {
+        if (!store.base.room) {
+          return;
+        }
 
-  return Memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
-}, "cachePathLength");
+        if (!store.base.room.memory.cachedPaths[concatenatedPosition][step.x]) {
+          store.base.room.memory.cachedPaths[concatenatedPosition][step.x] = {};
+        }
+
+        store.base.room.memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
+      });
+      return path.length;
+    }
+
+    return store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
+  },
+  "cachePathLength"
+);
 
 export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
@@ -130,17 +143,24 @@ export const findNaiveConstructionSite = profileFunction((constructionSites: Con
   }
 }, "findNaiveConstructionSite");
 
-export const getNaiveTransferTarget = profileFunction((creep: Creep) => {
-  const targets = creep.room.find(FIND_STRUCTURES, {
-    filter: structure => {
-      return (
-        (structure.structureType == STRUCTURE_EXTENSION ||
-          structure.structureType == STRUCTURE_SPAWN ||
-          structure.structureType == STRUCTURE_TOWER) &&
-        structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-      );
-    }
-  });
+export const getNaiveTransferTargets = profileFunction(
+  (creep: Creep, structures = creep.room.find(FIND_STRUCTURES)) => {
+    const targets = (
+      structures.filter(structure => {
+        return (
+          (structure.structureType == STRUCTURE_EXTENSION ||
+            structure.structureType == STRUCTURE_SPAWN ||
+            (structure.structureType == STRUCTURE_TOWER &&
+              structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0.1 * structure.store.getCapacity(RESOURCE_ENERGY))) &&
+          structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        );
+      }) as (StructureExtension | StructureSpawn | StructureTower)[]
+    ).sort(
+      (a, b) =>
+        cachePathLength(creep, { type: "transfer", base: a }) - cachePathLength(creep, { type: "transfer", base: b })
+    );
 
-  return creep.pos.findClosestByPath(targets) as StructureExtension | StructureSpawn;
-}, "getNaiveTransferTarget");
+    return targets;
+  },
+  "getNaiveTransferTarget"
+);
