@@ -3,20 +3,15 @@ import { generateBody } from "./utils";
 
 export const nameCreep = (role: string) => `${role}${Game.time}`;
 
-const energyProduction = (room: Room) => {
+const energyProduction = (room: Room, creeps: Creep[]) => {
   const sources = room.find(FIND_SOURCES);
   const regenerationTime = 300; //sources.reduce((acc, source) => acc + source.ticksToRegeneration, 0);
-  const workParts = room.find(FIND_MY_CREEPS).reduce((acc, creep) => acc + creep.getActiveBodyparts(WORK), 0);
+  const workParts = creeps.reduce((acc, creep) => acc + creep.getActiveBodyparts(WORK), 0);
 
   const energyPotential = sources.length * 3000;
   const production = workParts * regenerationTime;
 
-  Game.time % 20 === 0 &&
-    console.log(
-      `[${Game.time.toLocaleString()}] Room ${room.name} Energy Production: ${production}/${energyPotential}`
-    );
-
-  return [workParts * regenerationTime, sources.length * 3000] as [production: number, energyPotential: number];
+  return [production, energyPotential] as [production: number, energyPotential: number];
 };
 
 export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
@@ -36,13 +31,19 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       return;
     }
 
-    const [production, energyPotential] = energyProduction(spawn.room);
+    const creepsInRoom = creeps.filter(creep => creep.room.name === spawn.room.name);
+
+    const [production, energyPotential] = energyProduction(spawn.room, creepsInRoom);
+
+    Game.time % 20 === 0 &&
+      console.log(
+        `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Energy Production: ${production}/${energyPotential}`
+      );
+
     if (production > 2 * energyPotential) {
       // console.log(`[${Game.time.toLocaleString()}] Room${spawn.room.name} Too much energy production`);
       return;
     }
-
-    const creepsInRoom = creeps.filter(creep => creep.room.name === spawn.room.name);
 
     //! Having too many creeps in a room is not a good condition to stop spawning, needs more dynamic conditions
     // if (
@@ -62,12 +63,16 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
         continue;
       }
 
+      const creepsOfRole = creepsInRoom.filter(creep => creep.memory.role === roleName);
+
+      const [production, energyPotential] = energyProduction(spawn.room, creepsOfRole);
+
       const newBody = "body" in role ? generateBody(spawn.room.energyAvailable, role.body) : role.generateBody(spawn);
 
       const bestBody =
         "body" in role ? generateBody(spawn.room.energyCapacityAvailable, role.body) : role.generateBody(spawn);
 
-      if (creepsInRoom.length && newBody.length < bestBody.length) {
+      if (creepsOfRole.length && newBody.length < (production / energyPotential) * bestBody.length) {
         continue;
       }
 
@@ -77,7 +82,9 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
         }) === OK
       ) {
         console.log(
-          `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Energy Production: ${production}/${energyPotential}`
+          `[${Game.time.toLocaleString()}] Room ${
+            spawn.room.name
+          } (${roleName}) Energy Production: ${production}/${energyPotential}`
         );
         console.log(
           `[${Game.time.toLocaleString()}] Room ${spawn.room.name}: Spawning new ${roleName} with body: [${newBody.join(

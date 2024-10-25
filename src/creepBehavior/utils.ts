@@ -31,7 +31,12 @@ export type UpgradeTarget = {
   base: StructureController;
 };
 
-export type ActionableTarget = EnergyTarget | TransferTarget | BuildTarget | UpgradeTarget;
+export type DismantleTarget = {
+  type: "dismantle";
+  base: Structure;
+};
+
+export type ActionableTarget = EnergyTarget | TransferTarget | BuildTarget | UpgradeTarget | DismantleTarget;
 
 export const getEnergyTargets = profileFunction(
   (
@@ -85,59 +90,82 @@ const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
   });
 }, "spatial.getSafeEnergyStores");
 
-export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, store: ActionableTarget) => {
-  if (sourcePos.pos.x === store.base.pos.x && sourcePos.pos.y === store.base.pos.y) {
-    return 0;
+export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
+  if (sourcePos.pos.x === target.base.pos.x && sourcePos.pos.y === target.base.pos.y) {
+    return "";
   }
-  if (!store.base.room) {
-    return 1000;
+  if (!target.base.room) {
+    return "";
   }
 
-  const concatenatedPosition = `${store.base.pos.x}_${store.base.pos.y}`;
-  store.base.room.memory.cachedPaths ??= {};
-  store.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
-  store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x] ??= {};
+  target.base.room.memory.cachedPaths ??= {};
+  target.base.room.memory.cachedPaths[target.base.pos.x] ??= {};
+  target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
+  target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x] ??= {};
 
-  if (!store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y]) {
-    const path = store.base.pos.findPathTo(sourcePos.pos.x, sourcePos.pos.y, { ignoreCreeps: true });
+  if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y]) {
+    const path = new RoomPosition(sourcePos.pos.x, sourcePos.pos.y, target.base.room.name).findPathTo(
+      target.base.pos.x,
+      target.base.pos.y,
+      { ignoreCreeps: true }
+    );
+    if (!path?.length) {
+      console.log(
+        `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`,
+        path.map(path => `(${path.x},${path.y})`).join("->")
+      );
+    }
+
+    const serializedPath = Room.serializePath(path);
+
     path.forEach((step, i) => {
-      if (!store.base.room) {
+      if (!target.base.room) {
         return;
       }
 
-      if (!store.base.room.memory.cachedPaths[concatenatedPosition][step.x]) {
-        store.base.room.memory.cachedPaths[concatenatedPosition][step.x] = {};
-      }
-
-      store.base.room.memory.cachedPaths[concatenatedPosition][step.x][step.y] ??= i + 1;
+      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x - step.dx] ??= {};
+      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x - step.dx][step.y - step.dy] ??=
+        serializedPath.slice(i);
     });
-    return path.length;
   }
 
-  return store.base.room.memory.cachedPaths[concatenatedPosition][sourcePos.pos.x][sourcePos.pos.y];
+  const res =
+    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y];
+
+  // if (!res) {
+  //   console.log(
+  //     `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`
+  //   );
+  // }
+
+  return res;
 }, "spatial.cachePathLength");
 
 export const moveToTargetByCachedPath = profileFunction(
-  (
-    creep: Creep,
-    target: ActionableTarget
-    // TODO: Add Visualization Options
-  ) => {
+  (creep: Creep, target: ActionableTarget, visualizationStyle?: MapPolyStyle) => {
     if (!target.base.room) {
       return ERR_NO_PATH;
     }
 
-    const concatenatedPosition = `${target.base.pos.x}_${target.base.pos.y}`;
     target.base.room.memory.cachedPaths ??= {};
-    target.base.room.memory.cachedPaths[concatenatedPosition] ??= {};
-    target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x] ??= {};
-    if (!target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x][creep.pos.y]) {
+    target.base.room.memory.cachedPaths[target.base.pos.x] ??= {};
+    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
+    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x] ??= {};
+    if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y]) {
       cachePathLength(creep, target);
     }
 
-    let { shortestDistance, direction } = getShortestWalk(target, creep, concatenatedPosition);
+    if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y]) {
+      return ERR_NO_PATH;
+    }
 
-    return creep.move(direction[0]);
+    //@ts-ignore
+    creep.memory._move =
+      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+
+    return creep.moveTo(target.base, {
+      visualizePathStyle: visualizationStyle
+    });
   },
   "spatial.moveToTargetByCachedPath"
 );
@@ -147,7 +175,7 @@ export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], cr
   const sortedEnergyStores = getSafeEnergyStores(energyStores)
     .map(store => ({
       ...store,
-      pathLength: cachePathLength(creep, store)
+      pathLength: cachePathLength(creep, store).length
     }))
     .sort((a, b) => a.pathLength - b.pathLength);
 
@@ -176,53 +204,14 @@ export const findNaiveConstructionSite = profileFunction((constructionSites: Con
 }, "spatial.findNaiveConstructionSite");
 
 export const getNaiveTransferTargets = profileFunction(
-  (creep: Creep, structures = creep.room.find(FIND_STRUCTURES)) => {
-    const targets = (
-      structures.filter(structure => {
-        return (
-          (structure.structureType == STRUCTURE_EXTENSION ||
-            structure.structureType == STRUCTURE_SPAWN ||
-            (structure.structureType == STRUCTURE_TOWER &&
-              structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0.1 * structure.store.getCapacity(RESOURCE_ENERGY))) &&
-          structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        );
-      }) as (StructureExtension | StructureSpawn | StructureTower)[]
-    ).sort(
+  (creep: Creep, transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]) => {
+    const targets = transferTargets.sort(
       (a, b) =>
-        cachePathLength(creep, { type: "transfer", base: a }) - cachePathLength(creep, { type: "transfer", base: b })
+        cachePathLength(creep, { type: "transfer", base: a }).length -
+        cachePathLength(creep, { type: "transfer", base: b }).length
     );
 
     return targets;
   },
   "spatial.getNaiveTransferTarget"
-);
-
-const getShortestWalk = profileFunction(
-  (
-    target: ActionableTarget,
-    creep: Creep,
-    concatenatedPosition: string = `${target.base.pos.x}_${target.base.pos.y}`
-  ) => {
-    let shortestDistance: number | undefined = undefined;
-    let direction = DIRECTIONS[0] as (typeof DIRECTIONS)[number];
-    for (const dir of DIRECTIONS) {
-      if (!target.base.room) {
-        break;
-      }
-
-      const distance =
-        target.base.room.memory.cachedPaths[concatenatedPosition][creep.pos.x + dir[1][0]][creep.pos.y + dir[1][1]];
-
-      shortestDistance ??= distance;
-
-      if (distance < shortestDistance) {
-        shortestDistance = distance;
-        direction = dir;
-        break;
-      }
-    }
-
-    return { shortestDistance, direction };
-  },
-  "spatial.getShortestWalk"
 );

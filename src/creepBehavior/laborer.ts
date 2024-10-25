@@ -66,7 +66,8 @@ export const laborerTick = profileFunction(
     tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),
     energyTargets: EnergyTarget[],
-    primaryEnergyTargets: EnergyTarget[]
+    primaryEnergyTargets: EnergyTarget[],
+    transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
   ) => {
     if (
       !creep.memory.state ||
@@ -108,7 +109,11 @@ export const laborerTick = profileFunction(
 
             // const message = `[${creep.name}]: Moving to construction site ${target.id} at ${target.pos}`;
             // console.log(message);
-            creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+            moveToTargetByCachedPath(
+              creep,
+              { type: "build", base: target },
+              { stroke: PATH_COLORS[creep.memory.state] }
+            );
           }
 
           break;
@@ -121,7 +126,11 @@ export const laborerTick = profileFunction(
 
           if (creep.dismantle(target) === ERR_NOT_IN_RANGE) {
             creep.memory.target = target.id;
-            creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+            moveToTargetByCachedPath(
+              creep,
+              { type: "dismantle", base: target },
+              { stroke: PATH_COLORS[creep.memory.state] }
+            );
           }
         }
 
@@ -168,19 +177,19 @@ export const laborerTick = profileFunction(
           if (
             target.type === "harvest" &&
             creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           } else if (
             target.type === "pickup" &&
             creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           } else if (
             target.type === "withdraw" &&
             creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           }
@@ -216,19 +225,19 @@ export const laborerTick = profileFunction(
           if (
             target.type === "harvest" &&
             creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           } else if (
             target.type === "pickup" &&
             creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           } else if (
             target.type === "withdraw" &&
             creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
-            creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } }) === OK
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] }) === OK
           ) {
             creep.memory.target = target.base.id;
           }
@@ -239,13 +248,17 @@ export const laborerTick = profileFunction(
       }
 
       case "transferring": {
-        const targets = getNaiveTransferTargets(creep, structures);
+        const targets = getNaiveTransferTargets(creep, transferTargets);
 
         for (const target of targets) {
           const transferResult = creep.transfer(target, RESOURCE_ENERGY);
           if (transferResult === ERR_NOT_IN_RANGE) {
             creep.memory.target = target.id;
-            creep.moveTo(target, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+            moveToTargetByCachedPath(
+              creep,
+              { type: "transfer", base: target },
+              { stroke: PATH_COLORS[creep.memory.state] }
+            );
             return;
           } else if (transferResult !== OK) {
             console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
@@ -259,7 +272,12 @@ export const laborerTick = profileFunction(
       case "upgrading": {
         if (creep.room.controller && creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) {
           creep.memory.target = creep.room.controller.id;
-          creep.moveTo(creep.room.controller, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state] } });
+
+          moveToTargetByCachedPath(
+            creep,
+            { type: "upgrade", base: creep.room.controller },
+            { stroke: PATH_COLORS[creep.memory.state] }
+          );
         }
 
         break;

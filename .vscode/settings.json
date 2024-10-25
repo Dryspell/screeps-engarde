@@ -26,11 +26,15 @@
     "typescript.tsdk": "./node_modules/typescript/lib",
     "eslint.enable": true,
     "cSpell.words": [
+      "BODYPART",
       "Bodyparts",
       "Buildable",
       "estree",
+      "kmeans",
+      "multirole",
       "pserver",
       "screeps",
+      "Tdata",
       "upgrader"
     ]
 }

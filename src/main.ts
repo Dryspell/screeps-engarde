@@ -43,7 +43,7 @@ declare global {
     minerPositions: { x: number; y: number }[];
     terrain: RoomTerrain;
     lastMemorizedTick: typeof Game.time;
-    cachedPaths: { [sourcePos: string]: { [x: number]: { [y: number]: number } } };
+    cachedPaths: { [sourcePosX: number]: { [sourcePosY: number]: { [x: number]: { [y: number]: string } } } };
   }
 
   interface Memory {
@@ -117,6 +117,16 @@ export const loop = ErrorMapper.wrapLoop(() =>
       const ruins = room.find(FIND_RUINS);
       const tombstones = room.find(FIND_TOMBSTONES);
       const unplannedStructures = getUnplannedStructures(room, structures);
+      const transferTargets = structures.filter(structure => {
+        return (
+          (structure.structureType == STRUCTURE_EXTENSION ||
+            structure.structureType == STRUCTURE_SPAWN ||
+            (structure.structureType == STRUCTURE_TOWER &&
+              structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0.1 * structure.store.getCapacity(RESOURCE_ENERGY))) &&
+          structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        );
+      }) as (StructureExtension | StructureSpawn | StructureTower)[];
+
 
       const miners = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
@@ -129,7 +139,8 @@ export const loop = ErrorMapper.wrapLoop(() =>
         structures,
         ruins,
         tombstones,
-        unplannedStructures
+        unplannedStructures,
+        transferTargets
       );
 
       const energyTargets = getEnergyTargets(droppedResources, structures, ruins, tombstones, sources);
@@ -145,7 +156,8 @@ export const loop = ErrorMapper.wrapLoop(() =>
         structures,
         ruins,
         tombstones,
-        unplannedStructures
+        unplannedStructures,
+        transferTargets
       );
     });
 
@@ -171,7 +183,8 @@ function dispatchByEnergySource(
   structures: AnyStructure[],
   ruins: Ruin[],
   tombstones: Tombstone[],
-  unplannedStructures: AnyStructure[]
+  unplannedStructures: AnyStructure[],
+  transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
 ) {
   creeps.forEach(creep =>
     ROLES[creep.memory.role].tick(
@@ -184,7 +197,8 @@ function dispatchByEnergySource(
       tombstones,
       unplannedStructures,
       energyTargets,
-      energyTargets
+      energyTargets,
+      transferTargets
     )
   );
 
