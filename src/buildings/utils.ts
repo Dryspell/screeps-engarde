@@ -1,3 +1,7 @@
+import { profileFunction } from "utils/screeps-profiler";
+import { getPlannedRoadsSteps } from "./roads";
+import { costCallback } from "spatial/spatial-utils";
+
 export const MAX_ROOM_EXTENSIONS = {
   1: 0,
   2: 5,
@@ -9,9 +13,14 @@ export const MAX_ROOM_EXTENSIONS = {
   8: 60
 } as const;
 
-export const buildRoadFromPosToSet = (room: Room, pos: RoomPosition, set: RoomPosition[], omitLast: boolean = true) => {
+export const buildRoadFromPosToSet = profileFunction((room: Room, pos: RoomPosition, set: RoomPosition[], omitLast: boolean = true) => {
   const posPathsToSet = set
-    .map(source => pos.findPathTo(source, { ignoreCreeps: true }))
+    .map(source =>
+      pos.findPathTo(source, {
+        ignoreCreeps: true,
+        costCallback: costCallback(Memory.rooms[room.name].paths?.map(p => p.path) ?? [])
+      })
+    )
     .sort((a, b) => a.length - b.length)
     .map(path => (omitLast ? path.slice(0, path.length - 1) : path));
 
@@ -36,9 +45,9 @@ export const buildRoadFromPosToSet = (room: Room, pos: RoomPosition, set: RoomPo
     }
   }
   return 0;
-};
+}, "buildings.roads.buildRoadFromPosToSet");
 
-export const getExits = (room: Room) => {
+export const getExits = profileFunction((room: Room) => {
   try {
     return Object.entries(Game.map.describeExits(room.name)).map(([dir, roomName]) => {
       // console.log(`[${Game.time.toLocaleString()}] Exits: ${dir} - ${roomName}`);
@@ -53,4 +62,40 @@ export const getExits = (room: Room) => {
     // console.log(`[${Game.time.toLocaleString()}] Error getting exits: ${e}`);
     return [];
   }
-};
+}, "spatial.getExits");
+
+export const getUnplannedStructures = profileFunction(
+  (room: Room, structures = room.find(FIND_STRUCTURES), plannedRoadSteps = getPlannedRoadsSteps(room)) => {
+    // If there is a building that is unplanned, dismantle it
+    const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
+
+    // const plannedExtensions = Memory.rooms[room.name].extensions
+    //   .filter(struct => struct.planned === true)
+    //   .map(extension => `${extension.pos.x}_${extension.pos.y}`);
+
+    if (!plannedRoadSteps.length) {
+      return extensions as AnyStructure[];
+    }
+
+    const plannedRoads = plannedRoadSteps.map(road => `${road.x}_${road.y}`);
+    // if (extensions.some(extension => plannedRoads.includes(`${extension.pos.x}_${extension.pos.y}`))) {
+    //   console.log(`Unexpected overlap between planned extensions and roads`);
+    //   console.log(`Recomputing planned extensions`);
+    //   Memory.rooms[room.name].extensions = getExistingExtensions(room);
+    //   // return;
+    // }
+
+    const unplannedStructures = extensions.filter(structure =>
+      plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
+    );
+    if (unplannedStructures.length) {
+      unplannedStructures.forEach(structure => {
+        // console.log(`[${Game.time.toLocaleString()}]: Unplanned structure found at ${structure.pos}`);
+        room.visual.text("X!", structure.pos.x, structure.pos.y, { color: "red" });
+      });
+    }
+
+    return unplannedStructures as AnyStructure[];
+  },
+  "buildings.getUnplannedStructures"
+);

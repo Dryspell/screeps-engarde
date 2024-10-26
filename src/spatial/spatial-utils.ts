@@ -2,7 +2,7 @@ import { profileFunction } from "utils/screeps-profiler";
 
 export type _hasPos = { pos: { x: number; y: number } };
 
-const distance2 = <T extends _hasPos>(a: T, b: T) => {
+export const distance2 = <TA extends _hasPos, TB extends _hasPos>(a: TA, b: TB) => {
   return (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
 };
 
@@ -89,3 +89,37 @@ export const kmeans = profileFunction(<Tdata extends _hasPos>(k: number, data: T
 
   return clusters.map((cluster, i) => ({ centroid: centroids[i], cluster }));
 }, "kmeans");
+
+export const hollowSquare = <T extends _hasPos>(center: T, width: number) => {
+  const halfWidth = Math.floor(width / 2);
+  const square = Array.from({ length: width ** 2 }, (_, i) => i).map(i => {
+    const x = center.pos.x + (i % width) - halfWidth;
+    const y = center.pos.y + Math.floor(i / width) - halfWidth;
+    return { pos: { x, y } };
+  });
+
+  return square.filter(
+    point =>
+      point.pos.x === center.pos.x - halfWidth ||
+      point.pos.x === center.pos.x + halfWidth ||
+      point.pos.y === center.pos.y - halfWidth ||
+      point.pos.y === center.pos.y + halfWidth
+  );
+};
+
+export const costCallback = profileFunction(
+  (paths?: PathStep[][]) => (roomName: string, costMatrix: CostMatrix) => {
+    if (!paths?.length) {
+      return costMatrix;
+    }
+
+    Memory.rooms[roomName].costMatrix ??= costMatrix.serialize();
+    const newMatrix = PathFinder.CostMatrix.deserialize(Memory.rooms[roomName].costMatrix);
+    paths.forEach(path => {
+      path.forEach(step => newMatrix.set(step.x, step.y, 1));
+    });
+    Memory.rooms[roomName].costMatrix = newMatrix.serialize();
+    return newMatrix;
+  },
+  "findPathTo.costCallback"
+);

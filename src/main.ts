@@ -2,11 +2,10 @@ import { ErrorMapper } from "utils/ErrorMapper";
 import { handleSpawning } from "spawning/spawning";
 import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
-import { getExits } from "buildings/utils";
-import { architectRoom, getPlannedRoadsSteps } from "architect";
-import { getUnplannedStructures } from "creepBehavior/laborer";
+import { getExits, getUnplannedStructures } from "buildings/utils";
+import { architectRoom } from "buildings/architect";
 import { kmeans } from "spatial/spatial-utils";
-import { cachePathLength, EnergyTarget, getEnergyTargets } from "creepBehavior/utils";
+import { cachePath, EnergyTarget, getEnergyTargets, getSafeEnergyTargets } from "creepBehavior/utils";
 import {
   type background,
   type email,
@@ -18,7 +17,7 @@ import {
   type restart,
   type stream
 } from "utils/screeps-profiler";
-import { visualize } from "visual";
+import { randomColors, VISUALIZATION_TOGGLES, visualize, visualizeKmeans } from "visual";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -44,12 +43,22 @@ declare global {
     terrain: RoomTerrain;
     lastMemorizedTick: typeof Game.time;
     cachedPaths: { [sourcePosX: number]: { [sourcePosY: number]: { [x: number]: { [y: number]: string } } } };
+    walls: {
+      type: "rampart" | "constructedWall";
+      planned: boolean;
+      pos: {
+        x: number;
+        y: number;
+      };
+    }[];
+    costMatrix: ReturnType<typeof PathFinder.CostMatrix.serialize>;
   }
 
   interface Memory {
     uuid: number;
     log: any;
     rooms: { [roomName: string]: RoomMemory };
+    visual: typeof VISUALIZATION_TOGGLES;
   }
 
   interface CreepMemory {
@@ -83,6 +92,8 @@ declare global {
 // This line monkey patches the global prototypes.
 enableProfiler();
 
+const colors = randomColors(30);
+
 export const loop = ErrorMapper.wrapLoop(() =>
   profilerWrap(() => {
     // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
@@ -92,9 +103,9 @@ export const loop = ErrorMapper.wrapLoop(() =>
       return;
     }
 
-    if (Game.time % 5 === 0) {
+    if (Game.time % 20 === 0) {
       console.log(`[${Game.time.toLocaleString()}] Profiling`);
-      Game.profiler.stream(1);
+      Game.profiler.stream(3);
     }
 
     const creeps = Object.values(Game.creeps);
@@ -112,7 +123,7 @@ export const loop = ErrorMapper.wrapLoop(() =>
       architectRoom(room, sources, constructionSites, structures);
       // const plannedRoadSteps = getPlannedRoadsSteps(room);
 
-      visualize(room);
+      visualize(room, creeps);
 
       const ruins = room.find(FIND_RUINS);
       const tombstones = room.find(FIND_TOMBSTONES);
@@ -126,7 +137,6 @@ export const loop = ErrorMapper.wrapLoop(() =>
           structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         );
       }) as (StructureExtension | StructureSpawn | StructureTower)[];
-
 
       const miners = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
@@ -143,7 +153,9 @@ export const loop = ErrorMapper.wrapLoop(() =>
         transferTargets
       );
 
-      const energyTargets = getEnergyTargets(droppedResources, structures, ruins, tombstones, sources);
+      const energyTargets = getSafeEnergyTargets(
+        getEnergyTargets(droppedResources, structures, ruins, tombstones, sources)
+      );
 
       const laborers = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
 
@@ -174,6 +186,8 @@ export const loop = ErrorMapper.wrapLoop(() =>
   })
 );
 
+const useKmeans = true;
+
 function dispatchByEnergySource(
   energyTargets: EnergyTarget[],
   creeps: Creep[],
@@ -186,47 +200,53 @@ function dispatchByEnergySource(
   unplannedStructures: AnyStructure[],
   transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
 ) {
-  creeps.forEach(creep =>
-    ROLES[creep.memory.role].tick(
-      creep,
-      sources,
-      constructionSites,
-      droppedResources,
-      structures,
-      ruins,
-      tombstones,
-      unplannedStructures,
-      energyTargets,
-      energyTargets,
-      transferTargets
-    )
-  );
+  if (!useKmeans) {
+    creeps.forEach(creep =>
+      ROLES[creep.memory.role].tick(
+        creep,
+        sources,
+        constructionSites,
+        droppedResources,
+        structures,
+        ruins,
+        tombstones,
+        unplannedStructures,
+        energyTargets,
+        energyTargets,
+        transferTargets
+      )
+    );
+  } else {
+    const creepClusters = kmeans(energyTargets.length, creeps).filter(c => c.cluster.length);
 
-  // const creepClusters = kmeans(energyTargets.length, creeps);
+    if (Memory.visual.kmeans) {
+      visualizeKmeans(creepClusters, colors);
+    }
 
-  // const sourcesByCluster = energyTargets.map(energyTarget => {
-  //   return {
-  //     energyTarget,
-  //     creepCluster: creepClusters
-  //       .sort((a, b) => cachePathLength(a.centroid, energyTarget) - cachePathLength(b.centroid, energyTarget))
-  //       .shift()
-  //   };
-  // });
-
-  // sourcesByCluster.forEach(sbc => {
-  //   sbc.creepCluster?.cluster.forEach(creep => {
-  //     ROLES[creep.memory.role].tick(
-  //       creep,
-  //       sources,
-  //       constructionSites,
-  //       droppedResources,
-  //       structures,
-  //       ruins,
-  //       tombstones,
-  //       unplannedStructures,
-  //       energyTargets,
-  //       [sbc.energyTarget]
-  //     );
-  //   });
-  // });
+    const sourcesByCluster = energyTargets.map(energyTarget => {
+      return {
+        energyTarget,
+        creepCluster: creepClusters
+          .sort((a, b) => cachePath(a.centroid, energyTarget).length - cachePath(b.centroid, energyTarget).length)
+          .shift()
+      };
+    });
+    sourcesByCluster.forEach(sbc => {
+      sbc.creepCluster?.cluster.forEach(creep => {
+        ROLES[creep.memory.role].tick(
+          creep,
+          sources,
+          constructionSites,
+          droppedResources,
+          structures,
+          ruins,
+          tombstones,
+          unplannedStructures,
+          energyTargets,
+          [sbc.energyTarget],
+          transferTargets
+        );
+      });
+    });
+  }
 }

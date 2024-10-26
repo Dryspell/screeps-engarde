@@ -1,4 +1,4 @@
-import { getExistingExtensions, getPlannedRoadsSteps } from "architect";
+import { getPlannedRoadsSteps } from "buildings/roads";
 import {
   EnergyTarget,
   findNaiveConstructionSite,
@@ -8,6 +8,7 @@ import {
   PATH_COLORS
 } from "./utils";
 import { profileFunction } from "utils/screeps-profiler";
+import { getUnplannedStructures } from "buildings/utils";
 
 export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   if (creep.memory.state === newState) return;
@@ -16,42 +17,6 @@ export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   newState && creep.say(newState);
   console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name}, ${creep.name} Switching to ${newState}`);
 };
-
-export const getUnplannedStructures = profileFunction(
-  (room: Room, structures = room.find(FIND_STRUCTURES), plannedRoadSteps = getPlannedRoadsSteps(room)) => {
-    // If there is a building that is unplanned, dismantle it
-    const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
-
-    // const plannedExtensions = Memory.rooms[room.name].extensions
-    //   .filter(struct => struct.planned === true)
-    //   .map(extension => `${extension.pos.x}_${extension.pos.y}`);
-
-    if (!plannedRoadSteps.length) {
-      return extensions as AnyStructure[];
-    }
-
-    const plannedRoads = plannedRoadSteps.map(road => `${road.x}_${road.y}`);
-    // if (extensions.some(extension => plannedRoads.includes(`${extension.pos.x}_${extension.pos.y}`))) {
-    //   console.log(`Unexpected overlap between planned extensions and roads`);
-    //   console.log(`Recomputing planned extensions`);
-    //   Memory.rooms[room.name].extensions = getExistingExtensions(room);
-    //   // return;
-    // }
-
-    const unplannedStructures = extensions.filter(structure =>
-      plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
-    );
-    if (unplannedStructures.length) {
-      unplannedStructures.forEach(structure => {
-        // console.log(`[${Game.time.toLocaleString()}]: Unplanned structure found at ${structure.pos}`);
-        room.visual.text("X!", structure.pos.x, structure.pos.y, { color: "red" });
-      });
-    }
-
-    return unplannedStructures as AnyStructure[];
-  },
-  "getUnplannedStructures"
-);
 
 export const laborerTick = profileFunction(
   (
@@ -104,16 +69,12 @@ export const laborerTick = profileFunction(
         if (constructionSites.length) {
           const target = findNaiveConstructionSite(constructionSites, creep);
 
-          if (creep.build(target) == ERR_NOT_IN_RANGE) {
-            creep.memory.target = target.id;
+          if (target.pathLength >= 2 || creep.build(target.base) == ERR_NOT_IN_RANGE) {
+            creep.memory.target = target.base.id;
 
             // const message = `[${creep.name}]: Moving to construction site ${target.id} at ${target.pos}`;
             // console.log(message);
-            moveToTargetByCachedPath(
-              creep,
-              { type: "build", base: target },
-              { stroke: PATH_COLORS[creep.memory.state] }
-            );
+            moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS[creep.memory.state] });
           }
 
           break;

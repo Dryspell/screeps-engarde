@@ -1,6 +1,8 @@
 import { getExits } from "buildings/utils";
 import { flatten } from "lodash";
+import { costCallback } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
+import { VISUALIZATION_TOGGLES } from "visual";
 
 const memorizeSpawnData = (spawn: StructureSpawn) => {
   return {
@@ -36,7 +38,7 @@ function memorizePaths(
   minerals: Mineral<MineralConstant>[]
 ) {
   const exits = Memory.rooms[room.name].exits;
-  const terrain = Memory.rooms[room.name].terrain;
+  const terrain = new Room.Terrain(room.name);
 
   const paths = [
     // Paths around Controller
@@ -143,20 +145,12 @@ function memorizePaths(
     )
   ];
 
-  const costCallback =
-    (paths: { path: PathStep[]; constructedRoad: boolean }[]) => (roomName: string, costMatrix: CostMatrix) => {
-      paths.forEach(path => {
-        path.path.forEach(step => costMatrix.set(step.x, step.y, 1));
-      });
-      return costMatrix;
-    };
-
   paths.push(
     // Paths from Controller to Sources
     ...(controller
       ? sources.map(source => ({
           path: source.pos
-            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
             .slice(0, -1),
           constructedRoad: false
         }))
@@ -173,7 +167,7 @@ function memorizePaths(
           return {
             path: closestExit
               ? controller.pos
-                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
                   .slice(0, -1)
               : [],
             constructedRoad: false
@@ -191,7 +185,7 @@ function memorizePaths(
           return {
             path: closestExit
               ? spawn.pos
-                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths) })
+                  .findPathTo(closestExit, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
                   .slice(0, -1)
               : [],
             constructedRoad: false
@@ -206,7 +200,7 @@ function memorizePaths(
     ...(controller
       ? spawns.map(spawn => ({
           path: spawn.pos
-            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .findPathTo(controller.pos, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
             .slice(0, -1),
           constructedRoad: false
         }))
@@ -219,7 +213,7 @@ function memorizePaths(
       spawns.map(spawn =>
         sources.map(source => ({
           path: spawn.pos
-            .findPathTo(source.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .findPathTo(source.pos, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
             .slice(0, -1),
           constructedRoad: false
         }))
@@ -233,7 +227,7 @@ function memorizePaths(
       spawns.map(spawn =>
         minerals.map(mineral => ({
           path: spawn.pos
-            .findPathTo(mineral.pos, { ignoreCreeps: true, costCallback: costCallback(paths) })
+            .findPathTo(mineral.pos, { ignoreCreeps: true, costCallback: costCallback(paths.map(p => p.path)) })
             .slice(0, -1),
           constructedRoad: false
         }))
@@ -245,7 +239,7 @@ function memorizePaths(
 }
 
 const memorizeMinerPositions = (room: Room, sources: Source[]) => {
-  const terrain = Memory.rooms[room.name].terrain;
+  const terrain = new Room.Terrain(room.name);
   return flatten(
     sources.map(source =>
       [
@@ -267,18 +261,18 @@ const memorizeMinerPositions = (room: Room, sources: Source[]) => {
 export const memorizeRoom = profileFunction(
   (
     room: Room,
-    refreshMemory = false,
     spawns = room.find(FIND_MY_SPAWNS),
     sources = room.find(FIND_SOURCES),
     controller = room.controller,
     structures = room.find(FIND_STRUCTURES),
     minerals = room.find(FIND_MINERALS)
   ) => {
+    Memory.visual ??= VISUALIZATION_TOGGLES;
+
     Memory.rooms ??= {};
     //@ts-ignore
     Memory.rooms[room.name] ??= {};
     Memory.rooms[room.name].exits ??= getExits(room);
-    Memory.rooms[room.name].terrain ??= new Room.Terrain(room.name);
     Memory.rooms[room.name].spawns ??= spawns.map(spawn => memorizeSpawnData(spawn));
     Memory.rooms[room.name].sources ??= sources.map(source => memorizeSourceData(source));
     Memory.rooms[room.name].controller ??= memorizeControllerData(room);
@@ -292,6 +286,7 @@ export const memorizeRoom = profileFunction(
     Memory.rooms[room.name].minerPositions ??= memorizeMinerPositions(room, sources);
     Memory.rooms[room.name].lastMemorizedTick ??= Game.time;
     Memory.rooms[room.name].cachedPaths ??= {};
+    Memory.rooms[room.name].walls ??= [];
   },
   "memorizeRoom"
 );

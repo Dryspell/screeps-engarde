@@ -1,5 +1,5 @@
 import { DIRECTIONS } from "spatial/constants";
-import { _hasPos } from "spatial/spatial-utils";
+import { _hasPos, costCallback, distance2 } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
@@ -80,57 +80,76 @@ export const getEnergyTargets = profileFunction(
   "spatial.getEnergyTargets"
 );
 
-const getSafeEnergyStores = profileFunction((energyStores: EnergyTarget[]) => {
-  return energyStores.filter(energyStore => {
-    return energyStore.base.pos.findInRange(FIND_HOSTILE_CREEPS, 5).length === 0 && energyStore.type === "harvest"
-      ? energyStore.base.energy > 25
-      : energyStore.type === "withdraw"
-      ? energyStore.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
+export const getSafeEnergyTargets = profileFunction((energyTargets: EnergyTarget[]) => {
+  const hostileCreeps = energyTargets[0].base.room?.find(FIND_HOSTILE_CREEPS);
+
+  // if (hostileCreeps?.length) {
+  //   console.log(
+  //     `${Game.time.toLocaleString()} Room ${energyTargets[0].base.room} Hostile creeps found: ${hostileCreeps
+  //       .map(creep => `(${creep.pos.x},${creep.pos.y})`)
+  //       .join(" | ")}`
+  //   );
+  // }
+
+  return energyTargets.filter(energyTarget => {
+    return hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25)
+      ? false
+      : energyTarget.type === "harvest"
+      ? energyTarget.base.energy > 25
+      : energyTarget.type === "withdraw"
+      ? energyTarget.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
       : true;
   });
 }, "spatial.getSafeEnergyStores");
 
-export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
+const serializeCoord = (coord: number) => (coord > 9 ? String(coord) : `0${coord}`);
+
+export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
   if (sourcePos.pos.x === target.base.pos.x && sourcePos.pos.y === target.base.pos.y) {
     return "";
   }
-  if (!target.base.room) {
+  const room = target.base.room;
+  if (!room) {
     return "";
   }
 
-  target.base.room.memory.cachedPaths ??= {};
-  target.base.room.memory.cachedPaths[target.base.pos.x] ??= {};
-  target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
-  target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x] ??= {};
+  room.memory.cachedPaths ??= {};
+  room.memory.cachedPaths[target.base.pos.x] ??= {};
+  room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
+  room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x] ??= {};
 
-  if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y]) {
-    const path = new RoomPosition(sourcePos.pos.x, sourcePos.pos.y, target.base.room.name).findPathTo(
-      target.base.pos.x,
-      target.base.pos.y,
-      { ignoreCreeps: true }
-    );
+  if (!room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y]) {
+    const roomPosition = new RoomPosition(sourcePos.pos.x, sourcePos.pos.y, room.name);
+    const path = roomPosition.findPathTo(target.base.pos.x, target.base.pos.y, {
+      ignoreCreeps: true,
+      costCallback: costCallback(Memory.rooms[room.name].paths?.map(p => p.path))
+    });
+
     if (!path?.length) {
       console.log(
         `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`,
         path.map(path => `(${path.x},${path.y})`).join("->")
       );
+      return "";
     }
 
     const serializedPath = Room.serializePath(path);
+    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y] ??= serializedPath;
 
     path.forEach((step, i) => {
-      if (!target.base.room) {
+      if (!room) {
         return;
       }
+      if (room.memory.cachedPaths[target.base.pos.x]?.[target.base.pos.y]?.[step.x]?.[step.y]) return;
 
-      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x - step.dx] ??= {};
-      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x - step.dx][step.y - step.dy] ??=
-        serializedPath.slice(i);
+      room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x] ??= {};
+      room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x][step.y] ??= `${serializeCoord(
+        step.x
+      )}${serializeCoord(step.y)}${serializedPath.slice(4 + i)}`;
     });
   }
 
-  const res =
-    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y];
+  const res = room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y];
 
   // if (!res) {
   //   console.log(
@@ -139,43 +158,49 @@ export const cachePathLength = profileFunction(<T extends _hasPos>(sourcePos: T,
   // }
 
   return res;
-}, "spatial.cachePathLength");
+}, "spatial.cachePath");
 
 export const moveToTargetByCachedPath = profileFunction(
-  (creep: Creep, target: ActionableTarget, visualizationStyle?: MapPolyStyle) => {
-    if (!target.base.room) {
+  (creep: Creep, target: ActionableTarget, visualizePathStyle?: MapPolyStyle) => {
+    const room = target.base.room;
+    if (!room) {
       return ERR_NO_PATH;
     }
 
-    target.base.room.memory.cachedPaths ??= {};
-    target.base.room.memory.cachedPaths[target.base.pos.x] ??= {};
-    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
-    target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x] ??= {};
-    if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y]) {
-      cachePathLength(creep, target);
-    }
+    room.memory.cachedPaths ??= {};
+    room.memory.cachedPaths[target.base.pos.x] ??= {};
+    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
+    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x] ??= {};
+    const path = cachePath(creep, target);
 
-    if (!target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y]) {
+    if (!path) {
       return ERR_NO_PATH;
     }
 
-    //@ts-ignore
-    creep.memory._move =
-      target.base.room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+    if (Memory.visual.cachedPaths) {
+      const deserializedPath = Room.deserializePath(path).map(
+        (step, i, p) => [step.x - p[0].x + creep.pos.x, step.y - p[0].y + creep.pos.y] as [number, number]
+      );
 
-    return creep.moveTo(target.base, {
-      visualizePathStyle: visualizationStyle
-    });
+      // console.log(
+      //   `Deserialized path (${target.base.pos.x},${target.base.pos.y}), (${creep.pos.x}, ${creep.pos.y}):`,
+      //   JSON.stringify(deserializedPath)
+      // );
+
+      creep.room.visual.poly(deserializedPath, { ...visualizePathStyle, stroke: "magenta" });
+    }
+
+    return path.slice(4).length < 5 ? creep.moveTo(target.base, { visualizePathStyle }) : creep.moveByPath(path);
   },
   "spatial.moveToTargetByCachedPath"
 );
 
 export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
-  const sortedEnergyStores = getSafeEnergyStores(energyStores)
+  const sortedEnergyStores = getSafeEnergyTargets(energyStores)
     .map(store => ({
       ...store,
-      pathLength: cachePathLength(creep, store).length
+      pathLength: cachePath(creep, store).length
     }))
     .sort((a, b) => a.pathLength - b.pathLength);
 
@@ -183,23 +208,28 @@ export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], cr
 }, "spatial.getNaiveSources");
 
 export const findNaiveConstructionSite = profileFunction((constructionSites: ConstructionSite[], creep: Creep) => {
-  const sitesByType = constructionSites.reduce((acc, site) => {
-    if (!acc[site.structureType]) {
-      acc[site.structureType] = [];
+  const sitesByLength = constructionSites.map(site => ({
+    type: "build" as const,
+    base: site,
+    pathLength: cachePath(creep, { type: "build", base: site }).length
+  }));
+  const sitesByType = sitesByLength.reduce((acc, site) => {
+    if (!acc[site.base.structureType]) {
+      acc[site.base.structureType] = [];
     }
 
-    acc[site.structureType].push(site);
+    acc[site.base.structureType].push(site);
     return acc;
-  }, {} as Record<BuildableStructureConstant, ConstructionSite[]>);
+  }, {} as Record<BuildableStructureConstant, { type: "build"; base: ConstructionSite; pathLength: number }[]>);
 
   if (sitesByType[STRUCTURE_EXTENSION]) {
-    return creep.pos.findClosestByPath(sitesByType[STRUCTURE_EXTENSION]) ?? sitesByType[STRUCTURE_EXTENSION][0];
+    return sitesByType[STRUCTURE_EXTENSION].sort((a, b) => a.pathLength - b.pathLength)[0];
   } else if (sitesByType[STRUCTURE_TOWER]) {
-    return creep.pos.findClosestByPath(sitesByType[STRUCTURE_TOWER]) ?? sitesByType[STRUCTURE_TOWER][0];
+    return sitesByType[STRUCTURE_TOWER].sort((a, b) => a.pathLength - b.pathLength)[0];
   } else if (sitesByType[STRUCTURE_ROAD]) {
-    return creep.pos.findClosestByPath(sitesByType[STRUCTURE_ROAD]) ?? sitesByType[STRUCTURE_ROAD][0];
+    return sitesByType[STRUCTURE_ROAD].sort((a, b) => a.pathLength - b.pathLength)[0];
   } else {
-    return creep.pos.findClosestByPath(constructionSites) ?? constructionSites[0];
+    return sitesByLength.sort((a, b) => a.pathLength - b.pathLength)[0];
   }
 }, "spatial.findNaiveConstructionSite");
 
@@ -207,8 +237,7 @@ export const getNaiveTransferTargets = profileFunction(
   (creep: Creep, transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]) => {
     const targets = transferTargets.sort(
       (a, b) =>
-        cachePathLength(creep, { type: "transfer", base: a }).length -
-        cachePathLength(creep, { type: "transfer", base: b }).length
+        cachePath(creep, { type: "transfer", base: a }).length - cachePath(creep, { type: "transfer", base: b }).length
     );
 
     return targets;
