@@ -24,6 +24,7 @@ const attemptToBuildCloseConstructionSites = (
 export const minerTick = profileFunction(
   (
     creep: Creep,
+    spawns: StructureSpawn[],
     sources: Source[] = creep.room.find(FIND_SOURCES),
     constructionSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES),
     droppedResources = creep.room.find(FIND_DROPPED_RESOURCES, {

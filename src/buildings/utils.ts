@@ -13,39 +13,42 @@ export const MAX_ROOM_EXTENSIONS = {
   8: 60
 } as const;
 
-export const buildRoadFromPosToSet = profileFunction((room: Room, pos: RoomPosition, set: RoomPosition[], omitLast: boolean = true) => {
-  const posPathsToSet = set
-    .map(source =>
-      pos.findPathTo(source, {
-        ignoreCreeps: true,
-        costCallback: costCallback(Memory.rooms[room.name].paths?.map(p => p.path) ?? [])
-      })
-    )
-    .sort((a, b) => a.length - b.length)
-    .map(path => (omitLast ? path.slice(0, path.length - 1) : path));
+export const buildRoadFromPosToSet = profileFunction(
+  (room: Room, pos: RoomPosition, set: RoomPosition[], omitLast: boolean = true) => {
+    const posPathsToSet = set
+      .map(source =>
+        pos.findPathTo(source, {
+          ignoreCreeps: true,
+          costCallback: costCallback(Memory.rooms[room.name].paths?.map(p => p.path) ?? [])
+        })
+      )
+      .sort((a, b) => a.length - b.length)
+      .map(path => (omitLast ? path.slice(0, path.length - 1) : path));
 
-  for (const path of posPathsToSet) {
-    for (const pathStep of path) {
-      if (
-        room
-          .lookForAt(LOOK_STRUCTURES, pathStep.x, pathStep.y)
-          .some(structure => structure.structureType === STRUCTURE_ROAD)
-      ) {
-        continue;
-      }
+    for (const path of posPathsToSet) {
+      for (const pathStep of path) {
+        if (
+          room
+            .lookForAt(LOOK_STRUCTURES, pathStep.x, pathStep.y)
+            .some(structure => structure.structureType === STRUCTURE_ROAD)
+        ) {
+          continue;
+        }
 
-      if (room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD) === OK) {
-        room.visual.text(`🚦 Building Road`, pathStep.x + 1, pathStep.y, {
-          align: "left",
-          opacity: 0.8
-        });
-        console.log(`[${Game.time.toLocaleString()}] Building road at ${pathStep.x}, ${pathStep.y}`);
-        return 1;
+        if (room.createConstructionSite(pathStep.x, pathStep.y, STRUCTURE_ROAD) === OK) {
+          room.visual.text(`🚦 Building Road`, pathStep.x + 1, pathStep.y, {
+            align: "left",
+            opacity: 0.8
+          });
+          console.log(`[${Game.time.toLocaleString()}] Building road at ${pathStep.x}, ${pathStep.y}`);
+          return 1;
+        }
       }
     }
-  }
-  return 0;
-}, "buildings.roads.buildRoadFromPosToSet");
+    return 0;
+  },
+  "buildings.roads.buildRoadFromPosToSet"
+);
 
 export const getExits = profileFunction((room: Room) => {
   try {
@@ -65,7 +68,12 @@ export const getExits = profileFunction((room: Room) => {
 }, "spatial.getExits");
 
 export const getUnplannedStructures = profileFunction(
-  (room: Room, structures = room.find(FIND_STRUCTURES), plannedRoadSteps = getPlannedRoadsSteps(room)) => {
+  (
+    room: Room,
+    structures = room.find(FIND_STRUCTURES),
+    constructionSites = room.find(FIND_CONSTRUCTION_SITES),
+    plannedRoadSteps = getPlannedRoadsSteps(room)
+  ) => {
     // If there is a building that is unplanned, dismantle it
     const extensions = structures.filter(structure => structure.structureType === STRUCTURE_EXTENSION);
 
@@ -85,9 +93,22 @@ export const getUnplannedStructures = profileFunction(
     //   // return;
     // }
 
+    const unplannedConstructionSites = constructionSites.filter(
+      site => site.structureType !== STRUCTURE_ROAD && plannedRoads.includes(`${site.pos.x}_${site.pos.y}`)
+    );
+
+    unplannedConstructionSites.forEach(site => {
+      if (site.structureType === STRUCTURE_EXTENSION) {
+        site.remove();
+      }
+      // console.log(`[${Game.time.toLocaleString()}]: Unplanned structure found at ${structure.pos}`);
+      room.visual.text("X!", site.pos.x, site.pos.y, { color: "red" });
+    });
+
     const unplannedStructures = extensions.filter(structure =>
       plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
     );
+
     if (unplannedStructures.length) {
       unplannedStructures.forEach(structure => {
         // console.log(`[${Game.time.toLocaleString()}]: Unplanned structure found at ${structure.pos}`);

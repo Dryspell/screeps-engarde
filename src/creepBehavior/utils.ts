@@ -1,5 +1,5 @@
 import { DIRECTIONS } from "spatial/constants";
-import { _hasPos, costCallback, distance2 } from "spatial/spatial-utils";
+import { _hasPos, costCallback, distance2, serializeCoord } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
@@ -80,31 +80,41 @@ export const getEnergyTargets = profileFunction(
   "spatial.getEnergyTargets"
 );
 
-export const getSafeEnergyTargets = profileFunction((energyTargets: EnergyTarget[]) => {
-  const hostileCreeps = energyTargets[0].base.room?.find(FIND_HOSTILE_CREEPS);
+export const getSafeEnergyTargets = profileFunction(
+  (energyTargets: EnergyTarget[], hostileCreeps = energyTargets[0].base.room?.find(FIND_HOSTILE_CREEPS)) => {
+    // if (hostileCreeps?.length) {
+    //   console.log(
+    //     `${Game.time.toLocaleString()} Room ${energyTargets[0].base.room} Hostile creeps found: ${hostileCreeps
+    //       .map(creep => `(${creep.pos.x},${creep.pos.y})`)
+    //       .join(" | ")}`
+    //   );
+    // }
 
-  // if (hostileCreeps?.length) {
-  //   console.log(
-  //     `${Game.time.toLocaleString()} Room ${energyTargets[0].base.room} Hostile creeps found: ${hostileCreeps
-  //       .map(creep => `(${creep.pos.x},${creep.pos.y})`)
-  //       .join(" | ")}`
-  //   );
-  // }
-
-  return energyTargets.filter(energyTarget => {
-    return hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25)
-      ? false
-      : energyTarget.type === "harvest"
-      ? energyTarget.base.energy > 25
-      : energyTarget.type === "withdraw"
-      ? energyTarget.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
-      : true;
-  });
-}, "spatial.getSafeEnergyStores");
-
-const serializeCoord = (coord: number) => (coord > 9 ? String(coord) : `0${coord}`);
+    return energyTargets.filter(energyTarget => {
+      return hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25)
+        ? false
+        : energyTarget.type === "harvest"
+        ? energyTarget.base.energy > 25
+        : energyTarget.type === "withdraw"
+        ? energyTarget.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
+        : true;
+    });
+  },
+  "spatial.getSafeEnergyStores"
+);
 
 export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
+  if (sourcePos.pos.x !== Math.round(sourcePos.pos.x) || sourcePos.pos.y !== Math.round(sourcePos.pos.y)) {
+    const message = `Invalid sourcePos: ${sourcePos.pos.x}, ${sourcePos.pos.y}`;
+    console.error(message);
+    throw new Error(message);
+  }
+  if (target.base.pos.x !== Math.round(target.base.pos.x) || target.base.pos.y !== Math.round(target.base.pos.y)) {
+    const message = `Invalid targetPos: ${target.base.pos.x}, ${target.base.pos.y}`;
+    console.error(message);
+    throw new Error(message);
+  }
+
   if (sourcePos.pos.x === target.base.pos.x && sourcePos.pos.y === target.base.pos.y) {
     return "";
   }
@@ -160,11 +170,16 @@ export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, targe
   return res;
 }, "spatial.cachePath");
 
+const walkableStructures: StructureConstant[] = [STRUCTURE_CONTAINER, STRUCTURE_ROAD, STRUCTURE_RAMPART];
+
 export const moveToTargetByCachedPath = profileFunction(
   (creep: Creep, target: ActionableTarget, visualizePathStyle?: MapPolyStyle) => {
     const room = target.base.room;
     if (!room) {
       return ERR_NO_PATH;
+    }
+    if (creep.fatigue) {
+      return ERR_TIRED;
     }
 
     room.memory.cachedPaths ??= {};
@@ -174,23 +189,50 @@ export const moveToTargetByCachedPath = profileFunction(
     const path = cachePath(creep, target);
 
     if (!path) {
+      console.log(`Could not find path for ${creep.name}`);
       return ERR_NO_PATH;
     }
 
-    if (Memory.visual.cachedPaths) {
-      const deserializedPath = Room.deserializePath(path).map(
-        (step, i, p) => [step.x - p[0].x + creep.pos.x, step.y - p[0].y + creep.pos.y] as [number, number]
-      );
+    const deserializedPath = Room.deserializePath(path).map((step, i, p) => ({
+      ...step,
+      x: step.x - p[0].x + creep.pos.x,
+      y: step.y - p[0].y + creep.pos.y
+    }));
 
+    if (Memory.visual.cachedPaths) {
       // console.log(
       //   `Deserialized path (${target.base.pos.x},${target.base.pos.y}), (${creep.pos.x}, ${creep.pos.y}):`,
       //   JSON.stringify(deserializedPath)
       // );
 
-      creep.room.visual.poly(deserializedPath, { ...visualizePathStyle, stroke: "magenta" });
+      creep.room.visual.poly(
+        deserializedPath.map(p => [p.x, p.y]),
+        { ...visualizePathStyle, stroke: "magenta" }
+      );
     }
 
-    return path.slice(4).length < 5 ? creep.moveTo(target.base, { visualizePathStyle }) : creep.moveByPath(path);
+    if (!deserializedPath[1]) {
+      // console.log(`[${Game.time}] ${creep.room.name} ${creep.name} Invalid path: ${JSON.stringify(deserializedPath)}`);
+      return creep.moveTo(target.base, { visualizePathStyle });
+    }
+
+    // console.log(`${JSON.stringify(creep.pos)}, ${JSON.stringify(deserializedPath[1])}`);
+    const nextStep = new RoomPosition(deserializedPath[1].x, deserializedPath[1].y, creep.room.name);
+
+    if (
+      nextStep
+        .look()
+        .filter(lookResult => lookResult.structure && !walkableStructures.includes(lookResult.structure.structureType))
+        .length
+    ) {
+      creep.room.visual.text("!", nextStep, { color: "red" });
+      delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+      return creep.moveTo(target.base, { visualizePathStyle });
+    } else {
+      return creep.move(deserializedPath[1].direction);
+    }
+
+    // return path.slice(4).length < 5 ? creep.moveTo(target.base, { visualizePathStyle }) : creep.moveByPath(path);
   },
   "spatial.moveToTargetByCachedPath"
 );

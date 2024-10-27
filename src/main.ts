@@ -4,20 +4,19 @@ import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits, getUnplannedStructures } from "buildings/utils";
 import { architectRoom } from "buildings/architect";
-import { kmeans } from "spatial/spatial-utils";
-import { cachePath, EnergyTarget, getEnergyTargets, getSafeEnergyTargets } from "creepBehavior/utils";
+import { getEnergyTargets, getSafeEnergyTargets } from "creepBehavior/utils";
 import {
   type background,
   type email,
-  enable as enableProfiler,
   type profile,
-  profileFunction,
   profilerOutput,
   wrap as profilerWrap,
   type restart,
   type stream
 } from "utils/screeps-profiler";
-import { randomColors, VISUALIZATION_TOGGLES, visualize, visualizeKmeans } from "visual";
+import { VISUALIZATION_TOGGLES, visualize } from "visual";
+import { dispatchByEnergySource } from "creepBehavior/dispatch";
+import { enable as enableProfiler } from "./utils/screeps-profiler";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -59,6 +58,7 @@ declare global {
     log: any;
     rooms: { [roomName: string]: RoomMemory };
     visual: typeof VISUALIZATION_TOGGLES;
+    cpuResumeAt?: number;
   }
 
   interface CreepMemory {
@@ -92,28 +92,35 @@ declare global {
 // This line monkey patches the global prototypes.
 enableProfiler();
 
-const colors = randomColors(30);
+const CPU_ARREST = 400;
+const CPU_RESUME = 800;
 
 export const loop = ErrorMapper.wrapLoop(() =>
   profilerWrap(() => {
     // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
 
-    if (Game.cpu.bucket < 500) {
-      Game.time % 20 === 0 && console.log(`Bucket is low: ${Game.cpu.bucket}`);
+    if (Game.cpu.bucket <= (Memory.cpuResumeAt ?? CPU_ARREST)) {
+      console.log(`CPU Bucket is low: ${Game.cpu.bucket}`);
+      Memory.cpuResumeAt = CPU_RESUME;
+      // Game.cpu.halt && Game.cpu.halt();
       return;
+    } else {
+      Memory.cpuResumeAt = CPU_ARREST;
     }
 
-    if (Game.time % 20 === 0) {
+    if (Game.time % 10 === 0) {
       console.log(`[${Game.time.toLocaleString()}] Profiling`);
-      Game.profiler.stream(3);
+      Game.profiler.stream(5);
     }
 
     const creeps = Object.values(Game.creeps);
     const spawns = Object.values(Game.spawns);
     const controlledRooms = Object.values(Game.rooms);
+    console.log(`Controlled Rooms: ${controlledRooms.map(room => room.name).join(", ")}`);
 
     controlledRooms.forEach(room => {
       const sources = room.find(FIND_SOURCES);
+      const spawnsInRoom = spawns.filter(spawn => spawn.room.name === room.name);
       const constructionSites = room.find(FIND_MY_CONSTRUCTION_SITES);
       const droppedResources = room.find(FIND_DROPPED_RESOURCES, {
         filter: resource => resource.resourceType === RESOURCE_ENERGY
@@ -141,6 +148,8 @@ export const loop = ErrorMapper.wrapLoop(() =>
       const miners = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
       dispatchByEnergySource(
+        room,
+        spawnsInRoom,
         sources.map(source => ({ type: "harvest", base: source })),
         miners,
         sources,
@@ -153,13 +162,18 @@ export const loop = ErrorMapper.wrapLoop(() =>
         transferTargets
       );
 
+      const hostileCreeps = room.find(FIND_HOSTILE_CREEPS);
+
       const energyTargets = getSafeEnergyTargets(
-        getEnergyTargets(droppedResources, structures, ruins, tombstones, sources)
+        getEnergyTargets(droppedResources, structures, ruins, tombstones, sources),
+        hostileCreeps
       );
 
       const laborers = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
 
       dispatchByEnergySource(
+        room,
+        spawnsInRoom,
         energyTargets,
         laborers,
         sources,
@@ -171,11 +185,11 @@ export const loop = ErrorMapper.wrapLoop(() =>
         unplannedStructures,
         transferTargets
       );
+
+      towerBehavior(room, structures, hostileCreeps);
     });
 
     handleSpawning(spawns, creeps);
-
-    towerBehavior(controlledRooms);
 
     // Automatically delete memory of missing creeps
     for (const name in Memory.creeps) {
@@ -185,68 +199,3 @@ export const loop = ErrorMapper.wrapLoop(() =>
     }
   })
 );
-
-const useKmeans = true;
-
-function dispatchByEnergySource(
-  energyTargets: EnergyTarget[],
-  creeps: Creep[],
-  sources: Source[],
-  constructionSites: ConstructionSite<BuildableStructureConstant>[],
-  droppedResources: Resource<ResourceConstant>[],
-  structures: AnyStructure[],
-  ruins: Ruin[],
-  tombstones: Tombstone[],
-  unplannedStructures: AnyStructure[],
-  transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
-) {
-  if (!useKmeans) {
-    creeps.forEach(creep =>
-      ROLES[creep.memory.role].tick(
-        creep,
-        sources,
-        constructionSites,
-        droppedResources,
-        structures,
-        ruins,
-        tombstones,
-        unplannedStructures,
-        energyTargets,
-        energyTargets,
-        transferTargets
-      )
-    );
-  } else {
-    const creepClusters = kmeans(energyTargets.length, creeps).filter(c => c.cluster.length);
-
-    if (Memory.visual.kmeans) {
-      visualizeKmeans(creepClusters, colors);
-    }
-
-    const sourcesByCluster = energyTargets.map(energyTarget => {
-      return {
-        energyTarget,
-        creepCluster: creepClusters
-          .sort((a, b) => cachePath(a.centroid, energyTarget).length - cachePath(b.centroid, energyTarget).length)
-          .shift()
-      };
-    });
-    sourcesByCluster.forEach(sbc => {
-      sbc.creepCluster?.cluster.forEach(creep => {
-        ROLES[creep.memory.role].tick(
-          creep,
-          sources,
-          constructionSites,
-          droppedResources,
-          structures,
-          ruins,
-          tombstones,
-          unplannedStructures,
-          energyTargets,
-          [sbc.energyTarget],
-          transferTargets
-        );
-      });
-    });
-  }
-}

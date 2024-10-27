@@ -16,6 +16,8 @@ export const VISUALIZATION_TOGGLES = {
 export const randomColors = (length: number) =>
   Array.from({ length }, () => `#${Math.floor(Math.random() * 16777215).toString(16)}`);
 
+export const colors = randomColors(30);
+
 export const visualizeRoad = profileFunction((room: Room, path: PathStep[] | null) => {
   if (!path || !Memory.visual.roads) return;
 
@@ -62,13 +64,13 @@ export const visualizeWalls = profileFunction((room: Room) => {
   });
 }, "visual.walls");
 
-export const visualizeKmeans = profileFunction((cc: ReturnType<typeof kmeans>, colors: string[]) => {
+export const visualizeKmeans = profileFunction((room: Room, cc: ReturnType<typeof kmeans>, colors: string[]) => {
   const rectWidth = 2;
 
   cc.forEach((c, i) => {
     c.cluster.forEach(point => {
-      new RoomVisual().circle(point.pos.x, point.pos.y, { radius: 0.5, fill: colors[i] });
-      new RoomVisual().line(c.centroid.pos.x, c.centroid.pos.y, point.pos.x, point.pos.y, { color: colors[i] });
+      room.visual.circle(point.pos.x, point.pos.y, { radius: 0.5, fill: colors[i] });
+      room.visual.line(c.centroid.pos.x, c.centroid.pos.y, point.pos.x, point.pos.y, { color: colors[i] });
     });
     // c.centroid &&
     //   new RoomVisual().rect(c.centroid.pos.x - rectWidth / 2, c.centroid.pos.y, rectWidth, rectWidth, {

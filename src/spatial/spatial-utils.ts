@@ -2,19 +2,21 @@ import { profileFunction } from "utils/screeps-profiler";
 
 export type _hasPos = { pos: { x: number; y: number } };
 
-export const distance2 = <TA extends _hasPos, TB extends _hasPos>(a: TA, b: TB) => {
-  return (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
-};
+export const serializeCoord = (coord: number) => (coord > 9 ? String(coord) : `0${coord}`);
 
-const computeCentroid = <Tdata extends _hasPos>(points: Tdata[]) => {
+export const distance2 = profileFunction(<TA extends _hasPos, TB extends _hasPos>(a: TA, b: TB) => {
+  return (a.pos.x - b.pos.x) ** 2 + (a.pos.y - b.pos.y) ** 2;
+}, "spatial.distance2");
+
+export const computeCentroid = <Tdata extends _hasPos>(points: Tdata[]) => {
   if (!points.length) {
     throw new Error("No points to compute centroid");
   }
 
   return {
     pos: {
-      x: points.reduce((acc, point) => acc + point.pos.x, 0) / points.length,
-      y: points.reduce((acc, point) => acc + point.pos.y, 0) / points.length
+      x: Math.round(points.reduce((acc, point) => acc + point.pos.x, 0) / points.length),
+      y: Math.round(points.reduce((acc, point) => acc + point.pos.y, 0) / points.length)
     }
   };
 };

@@ -1,5 +1,6 @@
 import { profileFunction } from "utils/screeps-profiler";
 import { getPlannedRoadsSteps } from "./roads";
+import { computeCentroid, distance2 } from "spatial/spatial-utils";
 
 const MAX_TOWERS_IN_ROOM = 5;
 
@@ -182,44 +183,36 @@ export function handleBuildingTowers(
   }
 }
 
-export const towerBehavior = profileFunction((controlledRooms: Room[]) => {
-  controlledRooms.forEach(room => {
-    const towers = room.find(FIND_STRUCTURES, {
-      filter: { structureType: STRUCTURE_TOWER }
-    }) as StructureTower[];
+export const towerBehavior = profileFunction((room: Room, structures: Structure[], hostileCreeps: Creep[]) => {
+  const towers = structures.filter(struct => struct.structureType === STRUCTURE_TOWER) as StructureTower[];
 
-    const centroid = towers
-      .map(tower => tower.pos)
-      .reduce(
-        (acc, pos) => {
-          return [acc[0] + pos.x, acc[1] + pos.y] as [x: number, y: number];
-        },
-        [0, 0] as [x: number, y: number]
-      );
+  if (!towers.length) {
+    return;
+  }
 
-    const closestHostile = new RoomPosition(...centroid, room.name).findClosestByRange(FIND_HOSTILE_CREEPS);
-    if (closestHostile) {
-      towers.forEach(tower => tower.attack(closestHostile));
-      return;
-    }
+  const centroid = computeCentroid(towers);
+  const closestHostiles = hostileCreeps.sort((a, b) => distance2(a, centroid) - distance2(b, centroid));
 
-    const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
+  for (const closestHostile of closestHostiles) {
+    towers.forEach(tower => tower.attack(closestHostile));
+    break;
+  }
 
-    const damagedStructures = room.find(FIND_STRUCTURES, {
-      filter: structure =>
-        structure.hits < structure.hitsMax &&
-        structure.structureType !== STRUCTURE_EXTENSION &&
-        structure.structureType !== STRUCTURE_WALL &&
-        structure.structureType !== STRUCTURE_RAMPART &&
-        // Only repair planned roads
-        (structure.structureType === STRUCTURE_ROAD
-          ? plannedRoads.some(road => road.x === structure.pos.x && road.y === structure.pos.y)
-          : true)
-    }) as AnyStructure[];
+  const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
 
-    if (damagedStructures.length) {
-      towers.forEach(tower => tower.repair(damagedStructures[0]));
-      return;
-    }
-  });
+  const damagedStructures = structures.filter(structure => {
+    structure.hits < structure.hitsMax &&
+      structure.structureType !== STRUCTURE_EXTENSION &&
+      structure.structureType !== STRUCTURE_WALL &&
+      structure.structureType !== STRUCTURE_RAMPART &&
+      // Only repair planned roads
+      (structure.structureType === STRUCTURE_ROAD
+        ? plannedRoads.some(road => road.x === structure.pos.x && road.y === structure.pos.y)
+        : true);
+  }) as AnyStructure[];
+
+  if (damagedStructures.length) {
+    towers.forEach(tower => tower.repair(damagedStructures[0]));
+    return;
+  }
 }, "towers.behavior");
