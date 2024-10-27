@@ -1,7 +1,8 @@
 import { profileFunction } from "utils/screeps-profiler";
 import { switchState } from "./laborer";
-import { EnergyTarget, getNaiveSources, moveToTargetByCachedPath, PATH_COLORS } from "./utils";
+import { EnergyTarget, getClosestSources, moveToTargetByCachedPath, PATH_COLORS, TransferTarget } from "./utils";
 import { getUnplannedStructures } from "buildings/utils";
+import { splitByAdjacency } from "spatial/spatial-utils";
 
 const attemptToBuildCloseConstructionSites = (
   creep: Creep,
@@ -36,25 +37,29 @@ export const minerTick = profileFunction(
     unplannedStructures = getUnplannedStructures(creep.room),
     energyTargets: EnergyTarget[],
     primaryEnergyTargets: EnergyTarget[],
-    transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
+    transferTargets: TransferTarget[]
   ) => {
     switchState(creep, "harvesting");
 
-    const adjacentSource = sources.find(source => creep.pos.isNearTo(source));
+    const { adjacent, nonAdjacent } = splitByAdjacency(creep, energyTargets);
 
-    if (adjacentSource) {
-      const closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3);
+    if (adjacent.length && creep.body.some(part => part.type === "carry")) {
+      const closeConstructionSites = creep.body.some(part => part.type === "carry")
+        ? creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
+        : [];
 
       if (
         (creep.store.getCapacity(RESOURCE_ENERGY) &&
           !creep.store.getFreeCapacity(RESOURCE_ENERGY) &&
           closeConstructionSites.length) ||
-        creep.harvest(adjacentSource) === ERR_NOT_ENOUGH_RESOURCES
+        (adjacent[0].type === "harvest" && adjacent[0].base.energy <= 0 && closeConstructionSites.length)
       ) {
         attemptToBuildCloseConstructionSites(creep, closeConstructionSites);
       }
+    } else if (adjacent.length && adjacent[0].type === "harvest") {
+      creep.harvest(adjacent[0].base);
     } else {
-      const naivestSources = getNaiveSources(energyTargets, creep);
+      const naivestSources = getClosestSources(nonAdjacent, creep);
 
       if (!naivestSources.length) {
         console.log(`[${creep.name}]: No sources found to harvest`);
@@ -76,5 +81,5 @@ export const minerTick = profileFunction(
       }
     }
   },
-  "minerTick"
+  "creeps.behavior.miner.tick"
 );

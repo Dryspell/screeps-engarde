@@ -2,14 +2,15 @@ import { getPlannedRoadsSteps } from "buildings/roads";
 import {
   EnergyTarget,
   findNaiveConstructionSite,
-  getNaiveSources as getNaiveSources,
+  getClosestSources as getClosestSources,
   getNaiveTransferTargets,
   moveToTargetByCachedPath,
-  PATH_COLORS
+  PATH_COLORS,
+  TransferTarget
 } from "./utils";
 import { profileFunction } from "utils/screeps-profiler";
 import { getUnplannedStructures } from "buildings/utils";
-import { distance2 } from "spatial/spatial-utils";
+import { _hasPos, distance2, splitByAdjacency } from "spatial/spatial-utils";
 
 export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   if (creep.memory.state === newState) return;
@@ -25,7 +26,7 @@ const laborerState = profileFunction(
     constructionSites: ConstructionSite<BuildableStructureConstant>[],
     unplannedStructures: AnyStructure[],
     energyTargets: EnergyTarget[],
-    transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
+    transferTargets: TransferTarget[]
   ) => {
     if (
       !creep.memory.state ||
@@ -53,7 +54,7 @@ const laborerState = profileFunction(
       switchState(creep, "upgrading");
     }
   },
-  "laborer.state"
+  "creeps.behavior.laborer.state"
 );
 
 const laborerBuild = profileFunction(
@@ -96,7 +97,7 @@ const laborerBuild = profileFunction(
       }
     }
   },
-  "laborer.build"
+  "creeps.behavior.laborer.build"
 );
 
 const getEnergyFromEnergyTarget = profileFunction((energyTarget: EnergyTarget, creep: Creep) => {
@@ -120,146 +121,100 @@ const laborerHarvest = profileFunction(
     energyTargets: EnergyTarget[],
     primaryEnergyTargets: EnergyTarget[]
   ) => {
+    const { adjacent, nonAdjacent } = splitByAdjacency(creep, energyTargets);
+
     const adjacentEnergyTarget = energyTargets.find(target => distance2(creep, target.base) < 2);
     if (adjacentEnergyTarget && getEnergyFromEnergyTarget(adjacentEnergyTarget, creep) === OK) {
       return;
     }
 
-    const naivestPrimaryTargets = getNaiveSources(primaryEnergyTargets, creep);
+    for (const targetCollection of [primaryEnergyTargets, energyTargets]) {
+      const sortedTargetsByDistance = getClosestSources(targetCollection, creep);
 
-    if (!naivestPrimaryTargets.length) {
-      console.log(
-        `[${Game.time.toLocaleString()}]: ${creep.name} in room ${
-          creep.room.name
-        }; No naive energy source found, ${energyTargets
-          .map(
-            target =>
-              `${target.type}: (${target.base.pos.x}, ${target.base.pos.y}) ${
-                target.type === "withdraw" ? target.base.store.getUsedCapacity(RESOURCE_ENERGY) : "UNKNOWN"
-              }`
+      if (!sortedTargetsByDistance.length) {
+        console.log(
+          `[${Game.time.toLocaleString()}]: ${creep.name} in room ${
+            creep.room.name
+          }; No naive energy source found, ${energyTargets
+            .map(
+              target =>
+                `${target.type}: (${target.base.pos.x}, ${target.base.pos.y}) ${
+                  target.type === "withdraw" ? target.base.store.getUsedCapacity(RESOURCE_ENERGY) : "UNKNOWN"
+                }`
+            )
+            .join(" | ")}`
+        );
+        sortedTargetsByDistance.push(
+          ...getClosestSources(
+            sources.map(source => ({ type: "harvest" as const, base: source })),
+            creep
           )
-          .join(" | ")}`
-      );
-      naivestPrimaryTargets.push(
-        ...getNaiveSources(
-          sources.map(source => ({ type: "harvest" as const, base: source })),
-          creep
-        )
-      );
-    }
-
-    // console.log(
-    //   `[${Game.time.toLocaleString()}] Room ${creep.room.name} Creep ${
-    //     creep.name
-    //   } Primary Energy Targets ${naivestPrimaryTargets
-    //     .map(target => `${target.type} (${target.base.pos.x}, ${target.base.pos.y})`)
-    //     .join(" | ")}`
-    // );
-
-    for (const target of naivestPrimaryTargets) {
-      if (
-        target.type === "harvest" &&
-        creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
-        return;
-      } else if (
-        target.type === "pickup" &&
-        creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
-        return;
-      } else if (
-        target.type === "withdraw" &&
-        creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
-        return;
+        );
       }
 
-      // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
-      return;
-    }
+      // console.log(
+      //   `[${Game.time.toLocaleString()}] Room ${creep.room.name} Creep ${
+      //     creep.name
+      //   } Primary Energy Targets ${naivestPrimaryTargets
+      //     .map(target => `${target.type} (${target.base.pos.x}, ${target.base.pos.y})`)
+      //     .join(" | ")}`
+      // );
 
-    const naivestSources = getNaiveSources(energyTargets, creep);
+      for (const target of sortedTargetsByDistance) {
+        if (
+          target.type === "harvest" &&
+          creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
+          moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
+        ) {
+          creep.memory.target = target.base.id;
+          return;
+        } else if (
+          target.type === "pickup" &&
+          creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
+          moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
+        ) {
+          creep.memory.target = target.base.id;
+          return;
+        } else if (
+          target.type === "withdraw" &&
+          creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
+          moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
+        ) {
+          creep.memory.target = target.base.id;
+          return;
+        }
 
-    if (!naivestSources.length) {
-      console.log(
-        `[${Game.time.toLocaleString()}]: ${creep.name} in room ${
-          creep.room.name
-        }; No naive energy source found, ${energyTargets
-          .map(
-            target =>
-              `${target.type}: (${target.base.pos.x}, ${target.base.pos.y}) ${
-                target.type === "withdraw" ? target.base.store.getUsedCapacity(RESOURCE_ENERGY) : "UNKNOWN"
-              }`
-          )
-          .join(" | ")}`
-      );
-      naivestSources.push(
-        ...getNaiveSources(
-          sources.map(source => ({ type: "harvest" as const, base: source })),
-          creep
-        )
-      );
-    }
-
-    for (const target of naivestSources) {
-      if (
-        target.type === "harvest" &&
-        creep.harvest(target.base) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
-      } else if (
-        target.type === "pickup" &&
-        creep.pickup(target.base) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
-      } else if (
-        target.type === "withdraw" &&
-        creep.withdraw(target.base, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE &&
-        moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["harvesting"] }) === OK
-      ) {
-        creep.memory.target = target.base.id;
+        // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
+        return;
       }
-
-      // console.log(`[${Game.time.toLocaleString()}]: ${creep.name} moving to ${source.type}: ${source.base.id}`);
-      return;
     }
   },
-  "laborer.harvest"
+  "creeps.behavior.laborer.harvest"
 );
 
-const laborerTransfer = profileFunction(
-  (creep: Creep, transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]) => {
-    const adjacentTransferTargets = transferTargets.filter(target => distance2(creep, target) < 2);
-    for (const adjacentTransferTarget of adjacentTransferTargets) {
-      if (creep.transfer(adjacentTransferTarget, RESOURCE_ENERGY) === OK) {
-        return;
-      }
-    }
+const laborerTransfer = profileFunction((creep: Creep, transferTargets: TransferTarget[]) => {
+  const { adjacent, nonAdjacent } = splitByAdjacency(creep, transferTargets);
 
-    for (const target of transferTargets.filter(target => distance2(creep, target) >= 2)) {
-      const transferResult = creep.transfer(target, RESOURCE_ENERGY);
-      if (transferResult === ERR_NOT_IN_RANGE) {
-        creep.memory.target = target.id;
-        moveToTargetByCachedPath(creep, { type: "transfer", base: target }, { stroke: PATH_COLORS["transferring"] });
-        return;
-      } else if (transferResult !== OK) {
-        console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
-        return;
-      }
+  for (const adjacentTransferTarget of adjacent) {
+    if (creep.transfer(adjacentTransferTarget.base, RESOURCE_ENERGY) === OK) {
+      return;
     }
+  }
 
-    return;
-  },
-  "laborer.transfer"
-);
+  for (const target of nonAdjacent) {
+    const transferResult = creep.transfer(target.base, RESOURCE_ENERGY);
+    if (transferResult === ERR_NOT_IN_RANGE) {
+      creep.memory.target = target.base.id;
+      moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["transferring"] });
+      return;
+    } else if (transferResult !== OK) {
+      console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
+      return;
+    }
+  }
+
+  return;
+}, "creeps.behavior.laborer.transfer");
 
 const laborerUpgrade = profileFunction((creep: Creep) => {
   if (creep.room.controller && creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) {
@@ -271,7 +226,7 @@ const laborerUpgrade = profileFunction((creep: Creep) => {
       { stroke: PATH_COLORS["upgrading"] }
     );
   }
-}, "laborer.upgrade");
+}, "creeps.behavior.laborer.upgrade");
 
 export const laborerTick = profileFunction(
   (
@@ -288,7 +243,7 @@ export const laborerTick = profileFunction(
     unplannedStructures = getUnplannedStructures(creep.room),
     energyTargets: EnergyTarget[],
     primaryEnergyTargets: EnergyTarget[],
-    transferTargets: (StructureExtension | StructureSpawn | StructureTower)[]
+    transferTargets: TransferTarget[]
   ) => {
     laborerState(creep, constructionSites, unplannedStructures, energyTargets, transferTargets);
 
@@ -310,5 +265,5 @@ export const laborerTick = profileFunction(
       }
     }
   },
-  "laborer.tick"
+  "creeps.behavior.laborer.tick"
 );

@@ -4,7 +4,7 @@ import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits, getUnplannedStructures } from "buildings/utils";
 import { architectRoom } from "buildings/architect";
-import { getEnergyTargets, getSafeEnergyTargets } from "creepBehavior/utils";
+import { getEnergyTargets, getSafeEnergyTargets, TransferTarget } from "creepBehavior/utils";
 import {
   type background,
   type email,
@@ -17,6 +17,8 @@ import {
 import { VISUALIZATION_TOGGLES, visualize } from "visual";
 import { dispatchByEnergySource } from "creepBehavior/dispatch";
 import { enable as enableProfiler } from "./utils/screeps-profiler";
+import MemHack from "utils/memhack";
+import { isAccessible } from "spatial/spatial-utils";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -92,25 +94,17 @@ declare global {
 // This line monkey patches the global prototypes.
 enableProfiler();
 
-const CPU_ARREST = 400;
-const CPU_RESUME = 800;
+export const loop = ErrorMapper.wrapLoop(() => {
+  if (Game.cpu.bucket <= 1000) {
+    console.log(`CPU Bucket is low: ${Game.cpu.bucket}`);
+    return;
+  }
+  MemHack.pretick();
 
-export const loop = ErrorMapper.wrapLoop(() =>
-  profilerWrap(() => {
-    // console.log(`Current game tick is ${Game.time.toLocaleString()}`);
-
-    if (Game.cpu.bucket <= (Memory.cpuResumeAt ?? CPU_ARREST)) {
-      console.log(`CPU Bucket is low: ${Game.cpu.bucket}`);
-      Memory.cpuResumeAt = CPU_RESUME;
-      // Game.cpu.halt && Game.cpu.halt();
-      return;
-    } else {
-      Memory.cpuResumeAt = CPU_ARREST;
-    }
-
-    if (Game.time % 10 === 0) {
+  return profilerWrap(() => {
+    if (Game.time % 20 === 0) {
       console.log(`[${Game.time.toLocaleString()}] Profiling`);
-      Game.profiler.stream(5);
+      Game?.profiler?.stream(5);
     }
 
     const creeps = Object.values(Game.creeps);
@@ -135,15 +129,18 @@ export const loop = ErrorMapper.wrapLoop(() =>
       const ruins = room.find(FIND_RUINS);
       const tombstones = room.find(FIND_TOMBSTONES);
       const unplannedStructures = getUnplannedStructures(room, structures);
-      const transferTargets = structures.filter(structure => {
-        return (
-          (structure.structureType == STRUCTURE_EXTENSION ||
-            structure.structureType == STRUCTURE_SPAWN ||
-            (structure.structureType == STRUCTURE_TOWER &&
-              structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0.1 * structure.store.getCapacity(RESOURCE_ENERGY))) &&
-          structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        );
-      }) as (StructureExtension | StructureSpawn | StructureTower)[];
+      const transferTargets = structures
+        .filter(structure => {
+          return (
+            (structure.structureType == STRUCTURE_EXTENSION ||
+              structure.structureType == STRUCTURE_SPAWN ||
+              (structure.structureType == STRUCTURE_TOWER &&
+                structure.store.getFreeCapacity(RESOURCE_ENERGY) >
+                  0.1 * structure.store.getCapacity(RESOURCE_ENERGY))) &&
+            structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+          );
+        })
+        .map(t => ({ type: "transfer", base: t })) as TransferTarget[];
 
       const miners = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
@@ -174,7 +171,7 @@ export const loop = ErrorMapper.wrapLoop(() =>
       dispatchByEnergySource(
         room,
         spawnsInRoom,
-        energyTargets,
+        energyTargets.filter(target => isAccessible(target)),
         laborers,
         sources,
         constructionSites,
@@ -197,5 +194,5 @@ export const loop = ErrorMapper.wrapLoop(() =>
         delete Memory.creeps[name];
       }
     }
-  })
-);
+  });
+});

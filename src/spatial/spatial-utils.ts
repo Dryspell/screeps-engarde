@@ -1,3 +1,4 @@
+import { ActionableTarget, EnergyTarget } from "creepBehavior/utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export type _hasPos = { pos: { x: number; y: number } };
@@ -125,3 +126,33 @@ export const costCallback = profileFunction(
   },
   "findPathTo.costCallback"
 );
+
+export const splitByAdjacency = profileFunction(<T extends ActionableTarget>(creep: Creep, targets: T[]) => {
+  return targets.reduce(
+    (acc, target) => {
+      if (distance2(creep, target.base) < 2) {
+        acc.adjacent.push(target);
+      } else {
+        acc.nonAdjacent.push(target);
+      }
+      return acc;
+    },
+    { adjacent: [] as T[], nonAdjacent: [] as T[] }
+  );
+}, "spatial.splitByAdjacency");
+
+export const walkableStructures: StructureConstant[] = [STRUCTURE_CONTAINER, STRUCTURE_ROAD, STRUCTURE_RAMPART];
+
+export const isAccessible = profileFunction((energyTarget: EnergyTarget) => {
+  return hollowSquare(energyTarget.base, 3).some(
+    point =>
+      energyTarget.base.room
+        ?.lookAt(point.pos.x, point.pos.y)
+        .filter(
+          look =>
+            (look.type === "terrain" && look.terrain === "wall") ||
+            look.creep ||
+            (look.structure && !walkableStructures.includes(look.structure.structureType))
+        ).length === 0
+  );
+}, "spatial.isAccessible");

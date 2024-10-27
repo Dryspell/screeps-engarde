@@ -2,7 +2,7 @@ import { profileFunction } from "utils/screeps-profiler";
 import { getPlannedRoadsSteps } from "./roads";
 import { computeCentroid, distance2 } from "spatial/spatial-utils";
 
-const MAX_TOWERS_IN_ROOM = 5;
+const MAX_TOWERS_IN_ROOM = 1;
 
 export const planTowers = profileFunction(
   (
@@ -200,16 +200,34 @@ export const towerBehavior = profileFunction((room: Room, structures: Structure[
 
   const plannedRoads = getPlannedRoadsSteps(room).map(({ x, y }) => ({ x, y }));
 
-  const damagedStructures = structures.filter(structure => {
-    structure.hits < structure.hitsMax &&
-      structure.structureType !== STRUCTURE_EXTENSION &&
-      structure.structureType !== STRUCTURE_WALL &&
-      structure.structureType !== STRUCTURE_RAMPART &&
-      // Only repair planned roads
-      (structure.structureType === STRUCTURE_ROAD
-        ? plannedRoads.some(road => road.x === structure.pos.x && road.y === structure.pos.y)
-        : true);
-  }) as AnyStructure[];
+  const damagedStructures = structures
+    .filter(structure => {
+      return (
+        structure.hits < structure.hitsMax &&
+        structure.structureType !== STRUCTURE_EXTENSION &&
+        ((structure.structureType === STRUCTURE_WALL &&
+          Memory.rooms[room.name].walls.some(
+            wall =>
+              wall.planned &&
+              wall.type === STRUCTURE_WALL &&
+              wall.pos.x === structure.pos.x &&
+              wall.pos.y === structure.pos.y
+          )) ||
+          (structure.structureType === STRUCTURE_RAMPART &&
+            Memory.rooms[room.name].walls.some(
+              wall =>
+                wall.planned &&
+                wall.type === STRUCTURE_RAMPART &&
+                wall.pos.x === structure.pos.x &&
+                wall.pos.y === structure.pos.y
+            )) ||
+          // Only repair planned roads
+          (structure.structureType === STRUCTURE_ROAD
+            ? plannedRoads.some(road => road.x === structure.pos.x && road.y === structure.pos.y)
+            : true))
+      );
+    })
+    .sort((a, b) => a.hits - b.hits) as AnyStructure[];
 
   if (damagedStructures.length) {
     towers.forEach(tower => tower.repair(damagedStructures[0]));

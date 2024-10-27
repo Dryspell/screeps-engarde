@@ -309,7 +309,11 @@ const Profiler = {
     const streaming = Profiler.type() === "stream";
     const profiling = Profiler.type() === "profile";
     const onEndingTick = Memory.profiler.disableTick === Game.time;
-    return streaming || (profiling && onEndingTick);
+
+    const endTick = Math.min(Memory.profiler.disableTick || Game.time, Game.time);
+    const startTick = Memory.profiler.enabledTick + 1;
+
+    return (streaming && endTick - startTick > 0) || (profiling && onEndingTick);
   },
 
   shouldEmail() {

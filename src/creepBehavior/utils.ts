@@ -1,5 +1,5 @@
 import { DIRECTIONS } from "spatial/constants";
-import { _hasPos, costCallback, distance2, serializeCoord } from "spatial/spatial-utils";
+import { _hasPos, costCallback, distance2, serializeCoord, walkableStructures } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const PATH_COLORS = {
@@ -82,23 +82,11 @@ export const getEnergyTargets = profileFunction(
 
 export const getSafeEnergyTargets = profileFunction(
   (energyTargets: EnergyTarget[], hostileCreeps = energyTargets[0].base.room?.find(FIND_HOSTILE_CREEPS)) => {
-    // if (hostileCreeps?.length) {
-    //   console.log(
-    //     `${Game.time.toLocaleString()} Room ${energyTargets[0].base.room} Hostile creeps found: ${hostileCreeps
-    //       .map(creep => `(${creep.pos.x},${creep.pos.y})`)
-    //       .join(" | ")}`
-    //   );
-    // }
+    if (!hostileCreeps?.length) {
+      return energyTargets;
+    }
 
-    return energyTargets.filter(energyTarget => {
-      return hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25)
-        ? false
-        : energyTarget.type === "harvest"
-        ? energyTarget.base.energy > 25
-        : energyTarget.type === "withdraw"
-        ? energyTarget.base.store.getUsedCapacity(RESOURCE_ENERGY) > 0
-        : true;
-    });
+    return energyTargets.filter(energyTarget => hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25));
   },
   "spatial.getSafeEnergyStores"
 );
@@ -170,8 +158,6 @@ export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, targe
   return res;
 }, "spatial.cachePath");
 
-const walkableStructures: StructureConstant[] = [STRUCTURE_CONTAINER, STRUCTURE_ROAD, STRUCTURE_RAMPART];
-
 export const moveToTargetByCachedPath = profileFunction(
   (creep: Creep, target: ActionableTarget, visualizePathStyle?: MapPolyStyle) => {
     const room = target.base.room;
@@ -193,11 +179,13 @@ export const moveToTargetByCachedPath = profileFunction(
       return ERR_NO_PATH;
     }
 
-    const deserializedPath = Room.deserializePath(path).map((step, i, p) => ({
-      ...step,
-      x: step.x - p[0].x + creep.pos.x,
-      y: step.y - p[0].y + creep.pos.y
-    }));
+    const deserializedPath = Room.deserializePath(Memory.visual.cachedPaths ? path : path.slice(0, 6)).map(
+      (step, i, p) => ({
+        ...step,
+        x: step.x - p[0].x + creep.pos.x,
+        y: step.y - p[0].y + creep.pos.y
+      })
+    );
 
     if (Memory.visual.cachedPaths) {
       // console.log(
@@ -213,19 +201,28 @@ export const moveToTargetByCachedPath = profileFunction(
 
     if (!deserializedPath[1]) {
       // console.log(`[${Game.time}] ${creep.room.name} ${creep.name} Invalid path: ${JSON.stringify(deserializedPath)}`);
-      return creep.moveTo(target.base, { visualizePathStyle });
+      return ERR_NO_PATH;
     }
 
     // console.log(`${JSON.stringify(creep.pos)}, ${JSON.stringify(deserializedPath[1])}`);
-    const nextStep = new RoomPosition(deserializedPath[1].x, deserializedPath[1].y, creep.room.name);
+    // const nextStep = new RoomPosition(deserializedPath[1].x, deserializedPath[1].y, creep.room.name);
 
-    if (
-      nextStep
-        .look()
-        .filter(lookResult => lookResult.structure && !walkableStructures.includes(lookResult.structure.structureType))
-        .length
-    ) {
-      creep.room.visual.text("!", nextStep, { color: "red" });
+    const obstruction = deserializedPath.slice(1).find(
+      step =>
+        new RoomPosition(step.x, step.y, creep.room.name)
+          .look()
+          .filter(
+            lookResult =>
+              (lookResult.structure && !walkableStructures.includes(lookResult.structure.structureType)) ||
+              lookResult.terrain === "wall" ||
+              lookResult.creep
+          ).length
+    );
+    if (obstruction) {
+      console.log(
+        `${creep.room.name} ${creep.name} Cached path was obstructed from ${creep.pos.x},${creep.pos.y} to ${target.base.pos.x},${target.base.pos.y} at ${obstruction.x},${obstruction.y}`
+      );
+      creep.room.visual.text("!", obstruction.x, obstruction.y, { color: "red" });
       delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
       return creep.moveTo(target.base, { visualizePathStyle });
     } else {
@@ -237,9 +234,9 @@ export const moveToTargetByCachedPath = profileFunction(
   "spatial.moveToTargetByCachedPath"
 );
 
-export const getNaiveSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
+export const getClosestSources = profileFunction((energyStores: EnergyTarget[], creep: Creep) => {
   // If there are hostile creeps, find the closest source with energy that is not within 5 tiles of a hostile creep
-  const sortedEnergyStores = getSafeEnergyTargets(energyStores)
+  const sortedEnergyStores = energyStores
     .map(store => ({
       ...store,
       pathLength: cachePath(creep, store).length
