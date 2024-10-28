@@ -1,4 +1,3 @@
-import { DIRECTIONS } from "spatial/constants";
 import { _hasPos, costCallback, distance2, serializeCoord, walkableStructures } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
@@ -6,6 +5,7 @@ export const PATH_COLORS = {
   harvesting: "#ffaa00",
   transferring: "#00FFFF",
   building: "##00FF00",
+  dismantling: "##00FF00",
   upgrading: "#0000FF",
   claiming: "#FF0000",
   surveying: "#FF00FF"
@@ -207,8 +207,9 @@ export const moveToTargetByCachedPath = profileFunction(
     // console.log(`${JSON.stringify(creep.pos)}, ${JSON.stringify(deserializedPath[1])}`);
     // const nextStep = new RoomPosition(deserializedPath[1].x, deserializedPath[1].y, creep.room.name);
 
-    const obstruction = deserializedPath.slice(1).find(
-      step =>
+    const obstructions = deserializedPath
+      .slice(1)
+      .map(step =>
         new RoomPosition(step.x, step.y, creep.room.name)
           .look()
           .filter(
@@ -216,14 +217,29 @@ export const moveToTargetByCachedPath = profileFunction(
               (lookResult.structure && !walkableStructures.includes(lookResult.structure.structureType)) ||
               lookResult.terrain === "wall" ||
               lookResult.creep
-          ).length
-    );
-    if (obstruction) {
-      console.log(
-        `${creep.room.name} ${creep.name} Cached path was obstructed from ${creep.pos.x},${creep.pos.y} to ${target.base.pos.x},${target.base.pos.y} at ${obstruction.x},${obstruction.y}`
-      );
-      creep.room.visual.text("!", obstruction.x, obstruction.y, { color: "red" });
-      delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+          )
+          .map(lookResult => ({ ...lookResult, ...step }))
+      )
+      .filter(lookResults => lookResults.length);
+
+    if (obstructions.length) {
+      for (const obstructionListByPos of obstructions) {
+        if (obstructionListByPos.every(lookResult => lookResult.creep)) {
+          continue;
+        }
+
+        console.log(
+          `${creep.room.name} ${creep.name} Cached path was obstructed from ${creep.pos.x},${creep.pos.y} to ${
+            target.base.pos.x
+          },${target.base.pos.y} at ${obstructionListByPos[0].x},${obstructionListByPos[0].y} by ${obstructionListByPos
+            .map(obs => obs.type)
+            .join(", ")}`
+        );
+        creep.room.visual.text("!", obstructionListByPos[0].x, obstructionListByPos[0].y, { color: "red" });
+        delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+        break;
+      }
+
       return creep.moveTo(target.base, { visualizePathStyle });
     } else {
       return creep.move(deserializedPath[1].direction);

@@ -105,8 +105,16 @@ export const getUnplannedStructures = profileFunction(
       room.visual.text("X!", site.pos.x, site.pos.y, { color: "red" });
     });
 
-    const unplannedStructures = extensions.filter(structure =>
-      plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)
+    const unplannedStructures = (
+      extensions.filter(structure => plannedRoads.includes(`${structure.pos.x}_${structure.pos.y}`)) as AnyStructure[]
+    ).concat(
+      structures.filter(
+        structure =>
+          structure.structureType === STRUCTURE_WALL &&
+          Memory.rooms[room.name].walls.some(
+            wall => !wall.planned && wall.pos.x === structure.pos.x && wall.pos.y === structure.pos.y
+          )
+      )
     );
 
     if (unplannedStructures.length) {

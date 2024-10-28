@@ -54,7 +54,7 @@ export const ROLES = {
     max: 1,
     tick: claimerTick,
     spawnCondition: (room: Room, creeps: Creep[]) =>
-      room.energyAvailable >= 650 &&
+      false && room.energyAvailable >= 650 &&
       Object.keys(Game.rooms).length + creeps.filter(creep => creep.memory.role === "claimer").length < Game.gcl.level
   }
 } as const;

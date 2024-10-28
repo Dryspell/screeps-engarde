@@ -57,7 +57,8 @@ const planExtensions = profileFunction(
           lookResult.type !== "creep" &&
           lookResult.type !== "tombstone" &&
           !(lookResult.type === "terrain" && (lookResult.terrain === "swamp" || lookResult.terrain === "plain")) &&
-          lookResult.type !== "ruin"
+          lookResult.type !== "ruin" &&
+          (lookResult.structure ? lookResult.structure.structureType !== STRUCTURE_EXTENSION : true)
       )
       .map(({ x, y }) => ({ x, y }))
       .concat(constructionSites.map(({ pos }) => ({ x: pos.x, y: pos.y })))
@@ -91,7 +92,8 @@ const buildExtensions = profileFunction(
     spawns: StructureSpawn[],
     constructionSites: ConstructionSite<BuildableStructureConstant>[],
     extensions: StructureExtension[],
-    roomController: StructureController
+    roomController: StructureController,
+    plannedRoads = getPlannedRoadsSteps(room)
   ) => {
     if (extensions.length >= MAX_ROOM_EXTENSIONS[(room.controller?.level ?? 0) as keyof typeof MAX_ROOM_EXTENSIONS]) {
       return;
@@ -103,6 +105,12 @@ const buildExtensions = profileFunction(
     );
 
     for (const ext of closestToSpawnExts) {
+      if (plannedRoads.some(road => road.x === ext.pos.x && road.y === ext.pos.y)) {
+        Memory.rooms[room.name].extensions = Memory.rooms[room.name].extensions.filter(ext =>
+          plannedRoads.every(road => road.x === ext.pos.x && road.y === ext.pos.y)
+        );
+        planExtensions(spawns, room, constructionSites, plannedRoads, extensions);
+      }
       const constructionResult = room.createConstructionSite(ext.pos.x, ext.pos.y, STRUCTURE_EXTENSION);
       if (constructionResult === OK) {
         console.log(`[${Game.time.toLocaleString()}] ${room.name} Building extension at ${ext.pos.x}, ${ext.pos.y}`);
@@ -173,7 +181,7 @@ export const planAndBuildExtensions = profileFunction(
         } max extensions`
       );
 
-      buildExtensions(room, spawns, constructionSites, extensions, roomController);
+      buildExtensions(room, spawns, constructionSites, extensions, roomController, plannedRoads);
     }
   },
   "architect.extensions.planAndBuildExtensions"

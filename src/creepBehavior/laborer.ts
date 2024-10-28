@@ -36,13 +36,26 @@ const laborerState = profileFunction(
       switchState(creep, "harvesting");
     } else if (
       creep.room.energyAvailable >= creep.room.energyCapacityAvailable &&
-      (constructionSites.length || unplannedStructures.length) &&
+      constructionSites.length &&
       creep.room.controller &&
       creep.room.controller.ticksToDowngrade > 1000 &&
       creep.room.controller.level > 1
     ) {
       switchState(creep, "building");
-    } else if (creep.room.controller && creep.room.energyAvailable >= creep.room.energyCapacityAvailable) {
+    } else if (
+      creep.room.energyAvailable >= creep.room.energyCapacityAvailable &&
+      unplannedStructures.length &&
+      creep.room.controller &&
+      creep.room.controller.ticksToDowngrade > 1000 &&
+      creep.room.controller.level > 1 &&
+      creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+    ) {
+      switchState(creep, "dismantling");
+    } else if (
+      creep.room.controller &&
+      (creep.room.energyAvailable >= creep.room.energyCapacityAvailable ||
+        (creep.memory.state === "upgrading" && creep.store[RESOURCE_ENERGY] > 0))
+    ) {
       switchState(creep, "upgrading");
     } else if (
       transferTargets.length &&
@@ -84,20 +97,32 @@ const laborerBuild = profileFunction(
       }
 
       return;
-    } else if (unplannedStructures.length && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-      const target = creep.pos.findClosestByPath(unplannedStructures);
-      if (!target) {
-        console.log(`[${creep.name}]: No unplanned structures found`);
-        return;
-      }
-
-      if (creep.dismantle(target) === ERR_NOT_IN_RANGE) {
-        creep.memory.target = target.id;
-        moveToTargetByCachedPath(creep, { type: "dismantle", base: target }, { stroke: PATH_COLORS["building"] });
-      }
     }
   },
   "creeps.behavior.laborer.build"
+);
+
+const laborerDismantle = profileFunction(
+  (
+    creep: Creep,
+    spawns: StructureSpawn[],
+    sources = creep.room.find(FIND_SOURCES),
+    structures = creep.room.find(FIND_STRUCTURES),
+    constructionSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES),
+    unplannedStructures = getUnplannedStructures(creep.room, structures, constructionSites)
+  ) => {
+    const target = creep.pos.findClosestByPath(unplannedStructures);
+    if (!target) {
+      console.log(`[${creep.name}]: No unplanned structures found`);
+      return;
+    }
+
+    if (creep.dismantle(target) === ERR_NOT_IN_RANGE) {
+      creep.memory.target = target.id;
+      moveToTargetByCachedPath(creep, { type: "dismantle", base: target }, { stroke: PATH_COLORS["building"] });
+    }
+  },
+  "creeps.behavior.laborer.dismantle"
 );
 
 const getEnergyFromEnergyTarget = profileFunction((energyTarget: EnergyTarget, creep: Creep) => {
@@ -262,6 +287,16 @@ export const laborerTick = profileFunction(
 
       case "upgrading": {
         return laborerUpgrade(creep);
+      }
+
+      case "dismantling": {
+        return laborerDismantle(creep, spawns, sources, structures, constructionSites, unplannedStructures);
+      }
+
+      default: {
+        console.log(`[${creep.name}]: Unhandled state ${creep.memory.state}`);
+        creep.memory.state = "harvesting";
+        return;
       }
     }
   },

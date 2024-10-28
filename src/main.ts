@@ -68,7 +68,7 @@ declare global {
     room: string;
     target?: string;
     spawn?: string;
-    state?: "harvesting" | "upgrading" | "transferring" | "building" | "surveying" | "claiming";
+    state?: "harvesting" | "upgrading" | "transferring" | "building" | "dismantling" | "surveying" | "claiming";
     // working: boolean;
   }
 
@@ -108,6 +108,17 @@ export const loop = ErrorMapper.wrapLoop(() => {
     }
 
     const creeps = Object.values(Game.creeps);
+    creeps.forEach(creep => {
+      if (!creep.memory.role) {
+        console.log(`Creep ${creep.name} has no role`);
+        if (creep.name.includes("miner")) {
+          creep.memory.role = "miner";
+        } else if (creep.name.includes("laborer")) {
+          creep.memory.role = "laborer";
+        }
+      }
+    });
+
     const spawns = Object.values(Game.spawns);
     const controlledRooms = Object.values(Game.rooms);
     console.log(`Controlled Rooms: ${controlledRooms.map(room => room.name).join(", ")}`);

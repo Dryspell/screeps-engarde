@@ -40,20 +40,6 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
         `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Energy Production: ${production}/${energyPotential}`
       );
 
-    if (production > 2 * energyPotential) {
-      // console.log(`[${Game.time.toLocaleString()}] Room${spawn.room.name} Too much energy production`);
-      return;
-    }
-
-    //! Having too many creeps in a room is not a good condition to stop spawning, needs more dynamic conditions
-    // if (
-    //   creeps.filter(creep => creep.room.name === spawn.room.name).length >=
-    //   sortedRoles.reduce((acc, [_, { max }]) => acc + max, 0)
-    // ) {
-    //   // console.log(`[${Game.time.toLocaleString()}] Room ${spawn.room.name} Too many creeps to spawn another`);
-    //   return;
-    // }
-
     for (const entry of sortedRoles) {
       const [roleName, role] = entry;
       if (!isValidRole(roleName) || !role.spawnCondition(spawn.room, creeps)) {
@@ -72,7 +58,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       const bestBody =
         "body" in role ? generateBody(spawn.room.energyCapacityAvailable, role.body) : role.generateBody(spawn);
 
-      if (creepsOfRole.length && newBody.length < (production / energyPotential) * bestBody.length) {
+      if (creepsOfRole.length && newBody.length < Math.min(production / energyPotential, 1) * bestBody.length) {
         continue;
       }
 

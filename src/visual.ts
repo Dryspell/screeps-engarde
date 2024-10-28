@@ -60,7 +60,7 @@ export const visualizeWalls = profileFunction((room: Room) => {
           fill: "transparent",
           stroke: wall.type === "constructedWall" ? "brown" : "blue"
         })
-      : room.visual.text("X!", wall.pos.x, wall.pos.y, { color: "red" });
+      : null; // room.visual.text("X!", wall.pos.x, wall.pos.y, { color: "red" });
   });
 }, "visual.walls");
 
