@@ -20,6 +20,17 @@ export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
   console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name}, ${creep.name} Switching to ${newState}`);
 };
 
+export const harvestCondition = (creep: Creep) => {
+  const conditionSatisfied =
+    !creep.memory.state ||
+    creep.store[RESOURCE_ENERGY] === 0 ||
+    (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
+
+  conditionSatisfied && switchState(creep, "harvesting");
+
+  return conditionSatisfied;
+};
+
 const laborerState = profileFunction(
   (
     creep: Creep,
@@ -28,11 +39,7 @@ const laborerState = profileFunction(
     energyTargets: EnergyTarget[],
     transferTargets: TransferTarget[]
   ) => {
-    if (
-      !creep.memory.state ||
-      creep.store[RESOURCE_ENERGY] === 0 ||
-      (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
-    ) {
+    if (harvestCondition(creep)) {
       switchState(creep, "harvesting");
     } else if (
       creep.room.energyAvailable >= creep.room.energyCapacityAvailable &&
@@ -125,7 +132,7 @@ const laborerDismantle = profileFunction(
   "creeps.behavior.laborer.dismantle"
 );
 
-const getEnergyFromEnergyTarget = profileFunction((energyTarget: EnergyTarget, creep: Creep) => {
+export const getEnergyFromEnergyTarget = profileFunction((energyTarget: EnergyTarget, creep: Creep) => {
   if (energyTarget.type === "harvest" && creep.harvest(energyTarget.base) === OK) {
     creep.memory.target = energyTarget.base.id;
     return OK;
@@ -148,12 +155,13 @@ const laborerHarvest = profileFunction(
   ) => {
     const { adjacent, nonAdjacent } = splitByAdjacency(creep, energyTargets);
 
-    const adjacentEnergyTarget = energyTargets.find(target => distance2(creep, target.base) < 2);
-    if (adjacentEnergyTarget && getEnergyFromEnergyTarget(adjacentEnergyTarget, creep) === OK) {
-      return;
+    for (const adjacentEnergyTarget of adjacent) {
+      if (adjacentEnergyTarget && getEnergyFromEnergyTarget(adjacentEnergyTarget, creep) === OK) {
+        return;
+      }
     }
 
-    for (const targetCollection of [primaryEnergyTargets, energyTargets]) {
+    for (const targetCollection of [primaryEnergyTargets, nonAdjacent]) {
       const sortedTargetsByDistance = getClosestSources(targetCollection, creep);
 
       if (!sortedTargetsByDistance.length) {
@@ -259,12 +267,7 @@ export const laborerTick = profileFunction(
     spawns: StructureSpawn[],
     sources = creep.room.find(FIND_SOURCES),
     constructionSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES),
-    droppedResources = creep.room.find(FIND_DROPPED_RESOURCES, {
-      filter: resource => resource.resourceType === RESOURCE_ENERGY
-    }),
     structures = creep.room.find(FIND_STRUCTURES),
-    ruins = creep.room.find(FIND_RUINS),
-    tombstones = creep.room.find(FIND_TOMBSTONES),
     unplannedStructures = getUnplannedStructures(creep.room),
     energyTargets: EnergyTarget[],
     primaryEnergyTargets: EnergyTarget[],

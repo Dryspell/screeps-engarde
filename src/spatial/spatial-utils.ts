@@ -143,8 +143,8 @@ export const splitByAdjacency = profileFunction(<T extends ActionableTarget>(cre
 
 export const walkableStructures: StructureConstant[] = [STRUCTURE_CONTAINER, STRUCTURE_ROAD, STRUCTURE_RAMPART];
 
-export const isAccessible = profileFunction((energyTarget: EnergyTarget) => {
-  return hollowSquare(energyTarget.base, 3).some(
+export const accessiblePositions = profileFunction((energyTarget: EnergyTarget) => {
+  return hollowSquare(energyTarget.base, 3).filter(
     point =>
       energyTarget.base.room
         ?.lookAt(point.pos.x, point.pos.y)

@@ -1,6 +1,6 @@
 import { getExits } from "buildings/utils";
-import { flatten } from "lodash";
 import { costCallback } from "spatial/spatial-utils";
+import { flattenArray } from "utils/arraySets";
 import { profileFunction } from "utils/screeps-profiler";
 import { VISUALIZATION_TOGGLES } from "visual";
 
@@ -68,8 +68,8 @@ function memorizePaths(
           }
         ]
       : []), // Paths around Spawns
-    ...flatten(
-      flatten(
+    ...flattenArray(
+      flattenArray(
         (
           [
             [
@@ -178,7 +178,7 @@ function memorizePaths(
 
   paths.push(
     //Paths from Spawns to Exits
-    ...flatten(
+    ...flattenArray(
       spawns.map(spawn =>
         exits.map(exit => {
           const closestExit = spawn.pos.findClosestByPath(spawn.room.find(exit.exitDirection), { ignoreCreeps: true });
@@ -209,7 +209,7 @@ function memorizePaths(
 
   paths.push(
     // Paths from Spawns to Sources
-    ...flatten(
+    ...flattenArray(
       spawns.map(spawn =>
         sources.map(source => ({
           path: spawn.pos
@@ -223,7 +223,7 @@ function memorizePaths(
 
   paths.push(
     // Paths from Spawns to Minerals
-    ...flatten(
+    ...flattenArray(
       spawns.map(spawn =>
         minerals.map(mineral => ({
           path: spawn.pos
@@ -240,7 +240,7 @@ function memorizePaths(
 
 const memorizeMinerPositions = (room: Room, sources: Source[]) => {
   const terrain = new Room.Terrain(room.name);
-  return flatten(
+  return flattenArray(
     sources.map(source =>
       [
         [-1, 0],

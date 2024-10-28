@@ -22,64 +22,50 @@ const attemptToBuildCloseConstructionSites = (
   }
 };
 
-export const minerTick = profileFunction(
-  (
-    creep: Creep,
-    spawns: StructureSpawn[],
-    sources: Source[] = creep.room.find(FIND_SOURCES),
-    constructionSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES),
-    droppedResources = creep.room.find(FIND_DROPPED_RESOURCES, {
-      filter: resource => resource.resourceType === RESOURCE_ENERGY
-    }),
-    structures = creep.room.find(FIND_STRUCTURES),
-    ruins = creep.room.find(FIND_RUINS),
-    tombstones = creep.room.find(FIND_TOMBSTONES),
-    unplannedStructures = getUnplannedStructures(creep.room),
-    energyTargets: EnergyTarget[],
-    primaryEnergyTargets: EnergyTarget[],
-    transferTargets: TransferTarget[]
-  ) => {
-    switchState(creep, "harvesting");
+export const minerTick = profileFunction((creep: Creep, energyTargets: EnergyTarget[]) => {
+  switchState(creep, "harvesting");
 
-    const { adjacent, nonAdjacent } = splitByAdjacency(creep, energyTargets);
+  const { adjacent, nonAdjacent } = splitByAdjacency(creep, energyTargets);
 
-    if (adjacent.length && creep.body.some(part => part.type === "carry")) {
-      const closeConstructionSites = creep.body.some(part => part.type === "carry")
-        ? creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
-        : [];
+  if (
+    adjacent.length &&
+    creep.body.some(part => part.type === "carry") &&
+    !creep.store.getFreeCapacity(RESOURCE_ENERGY)
+  ) {
+    const closeConstructionSites = creep.body.some(part => part.type === "carry")
+      ? creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
+      : [];
 
-      if (
-        (creep.store.getCapacity(RESOURCE_ENERGY) &&
-          !creep.store.getFreeCapacity(RESOURCE_ENERGY) &&
-          closeConstructionSites.length) ||
-        (adjacent[0].type === "harvest" && adjacent[0].base.energy <= 0 && closeConstructionSites.length)
-      ) {
-        attemptToBuildCloseConstructionSites(creep, closeConstructionSites);
-      }
-    } else if (adjacent.length && adjacent[0].type === "harvest") {
-      creep.harvest(adjacent[0].base);
-    } else {
-      const naivestSources = getClosestSources(nonAdjacent, creep);
-
-      if (!naivestSources.length) {
-        console.log(`[${creep.name}]: No sources found to harvest`);
-        return;
-      }
-
-      const target = naivestSources[0];
-      if (target.type !== "harvest") {
-        console.error(`[${creep.name}]: Expected target to be a harvest source, but got ${target.type}`);
-        return;
-      }
-
-      if (creep.harvest(target.base) === ERR_NOT_IN_RANGE) {
-        creep.memory.target = target.base.id;
-        creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "harvesting"] } });
-      } else if (creep.harvest(target.base) === ERR_NOT_ENOUGH_RESOURCES) {
-        console.log(`[${creep.name}]: Source ${target.base.id} is empty`);
-        attemptToBuildCloseConstructionSites(creep);
-      }
+    if (
+      (creep.store.getCapacity(RESOURCE_ENERGY) &&
+        !creep.store.getFreeCapacity(RESOURCE_ENERGY) &&
+        closeConstructionSites.length) ||
+      (adjacent[0].type === "harvest" && adjacent[0].base.energy <= 0 && closeConstructionSites.length)
+    ) {
+      attemptToBuildCloseConstructionSites(creep, closeConstructionSites);
     }
-  },
-  "creeps.behavior.miner.tick"
-);
+  } else if (adjacent.length && adjacent[0].type === "harvest") {
+    creep.harvest(adjacent[0].base);
+  } else {
+    const naivestSources = getClosestSources(nonAdjacent, creep);
+
+    if (!naivestSources.length) {
+      console.log(`[${creep.name}]: No sources found to harvest`);
+      return;
+    }
+
+    const target = naivestSources[0];
+    if (target.type !== "harvest") {
+      console.log(`[${creep.name}]: Expected target to be a harvest source, but got ${target.type}`);
+      return;
+    }
+
+    if (creep.harvest(target.base) === ERR_NOT_IN_RANGE) {
+      creep.memory.target = target.base.id;
+      creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "harvesting"] } });
+    } else if (creep.harvest(target.base) === ERR_NOT_ENOUGH_RESOURCES) {
+      console.log(`[${creep.name}]: Source ${target.base.id} is empty`);
+      attemptToBuildCloseConstructionSites(creep);
+    }
+  }
+}, "creeps.behavior.miner.tick");

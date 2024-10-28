@@ -86,7 +86,7 @@ export const getSafeEnergyTargets = profileFunction(
       return energyTargets;
     }
 
-    return energyTargets.filter(energyTarget => hostileCreeps?.find(creep => distance2(creep, energyTarget.base) < 25));
+    return energyTargets.filter(energyTarget => hostileCreeps?.find(creep => distance2(creep, energyTarget.base) > 25));
   },
   "spatial.getSafeEnergyStores"
 );
@@ -94,12 +94,12 @@ export const getSafeEnergyTargets = profileFunction(
 export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
   if (sourcePos.pos.x !== Math.round(sourcePos.pos.x) || sourcePos.pos.y !== Math.round(sourcePos.pos.y)) {
     const message = `Invalid sourcePos: ${sourcePos.pos.x}, ${sourcePos.pos.y}`;
-    console.error(message);
+    console.log(message);
     throw new Error(message);
   }
   if (target.base.pos.x !== Math.round(target.base.pos.x) || target.base.pos.y !== Math.round(target.base.pos.y)) {
     const message = `Invalid targetPos: ${target.base.pos.x}, ${target.base.pos.y}`;
-    console.error(message);
+    console.log(message);
     throw new Error(message);
   }
 

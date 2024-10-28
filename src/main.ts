@@ -4,7 +4,11 @@ import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits, getUnplannedStructures } from "buildings/utils";
 import { architectRoom } from "buildings/architect";
-import { getEnergyTargets, getSafeEnergyTargets, TransferTarget } from "creepBehavior/utils";
+import {
+  getEnergyTargets,
+  getSafeEnergyTargets,
+  TransferTarget
+} from "creepBehavior/utils";
 import {
   type background,
   type email,
@@ -15,10 +19,9 @@ import {
   type stream
 } from "utils/screeps-profiler";
 import { VISUALIZATION_TOGGLES, visualize } from "visual";
-import { dispatchByEnergySource } from "creepBehavior/dispatch";
+import { dispatchLaborers, dispatchMiners } from "creepBehavior/dispatch";
 import { enable as enableProfiler } from "./utils/screeps-profiler";
 import MemHack from "utils/memhack";
-import { isAccessible } from "spatial/spatial-utils";
 // Any modules that you use that modify the game's prototypes should be require'd
 // before you require the profiler.
 
@@ -102,9 +105,9 @@ export const loop = ErrorMapper.wrapLoop(() => {
   MemHack.pretick();
 
   return profilerWrap(() => {
-    if (Game.time % 20 === 0) {
+    if (Game.time % 50 === 0) {
       console.log(`[${Game.time.toLocaleString()}] Profiling`);
-      Game?.profiler?.stream(5);
+      Game?.profiler?.stream(10);
     }
 
     const creeps = Object.values(Game.creeps);
@@ -121,7 +124,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
     const spawns = Object.values(Game.spawns);
     const controlledRooms = Object.values(Game.rooms);
-    console.log(`Controlled Rooms: ${controlledRooms.map(room => room.name).join(", ")}`);
+    // console.log(`Controlled Rooms: ${controlledRooms.map(room => room.name).join(", ")}`);
 
     controlledRooms.forEach(room => {
       const sources = room.find(FIND_SOURCES);
@@ -153,24 +156,19 @@ export const loop = ErrorMapper.wrapLoop(() => {
         })
         .map(t => ({ type: "transfer", base: t })) as TransferTarget[];
 
+      const hostileCreeps = room.find(FIND_HOSTILE_CREEPS);
+
       const miners = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
-      dispatchByEnergySource(
+      const unoccupiedMinerPositions = dispatchMiners(
         room,
-        spawnsInRoom,
-        sources.map(source => ({ type: "harvest", base: source })),
+        getSafeEnergyTargets(
+          sources.map(source => ({ type: "harvest", base: source })),
+          hostileCreeps
+        ),
         miners,
-        sources,
-        constructionSites,
-        droppedResources,
-        structures,
-        ruins,
-        tombstones,
-        unplannedStructures,
-        transferTargets
+        hostileCreeps
       );
-
-      const hostileCreeps = room.find(FIND_HOSTILE_CREEPS);
 
       const energyTargets = getSafeEnergyTargets(
         getEnergyTargets(droppedResources, structures, ruins, tombstones, sources),
@@ -179,18 +177,14 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
       const laborers = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
 
-      dispatchByEnergySource(
-        room,
-        spawnsInRoom,
-        energyTargets.filter(target => isAccessible(target)),
+      dispatchLaborers(
         laborers,
+        spawns,
         sources,
         constructionSites,
-        droppedResources,
         structures,
-        ruins,
-        tombstones,
         unplannedStructures,
+        energyTargets,
         transferTargets
       );
 

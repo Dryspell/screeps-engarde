@@ -1,4 +1,4 @@
-import { flatten } from "lodash";
+import { flattenArray } from "utils/arraySets";
 import { profileFunction } from "utils/screeps-profiler";
 
 export const buildRoads = profileFunction(
@@ -34,5 +34,5 @@ export const buildRoads = profileFunction(
 );
 
 export const getPlannedRoadsSteps = profileFunction((room: Room) => {
-  return flatten(Memory.rooms[room.name].paths.map(memorizedPath => memorizedPath.path));
+  return flattenArray(Memory.rooms[room.name].paths.map(memorizedPath => memorizedPath.path));
 }, "getPlannedRoadsSteps");
