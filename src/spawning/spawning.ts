@@ -1,6 +1,8 @@
 import { isValidRole, ROLES } from "creepBehavior/roles";
 import { generateBody } from "./utils";
 
+const bodyCost = (body: BodyPartConstant[]) => body.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+
 export const nameCreep = (role: string) => `${role}${Game.time}`;
 
 const energyProduction = (room: Room, creeps: Creep[]) => {
@@ -14,7 +16,20 @@ const energyProduction = (room: Room, creeps: Creep[]) => {
   return [production, energyPotential] as [production: number, energyPotential: number];
 };
 
-export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
+const minerSpawnCondition = (room: Room, hasUnoccupiedMinerPositions: boolean) => {
+  return room.energyAvailable >= bodyCost([MOVE, WORK, WORK]) && hasUnoccupiedMinerPositions;
+};
+
+const laborerSpawnCondition = (room: Room, creeps: Creep[]) => {
+  const laborersInRoom = creeps.filter(creep => creep.memory.role === "laborer");
+  return (
+    (Memory.rooms[room.name].minerPositions?.length &&
+      laborersInRoom.length < Memory.rooms[room.name].minerPositions?.length) ||
+    laborersInRoom.length < 1
+  );
+};
+
+export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[], hasUnoccupiedMinerPositions: boolean) => {
   const sortedRoles = Object.entries(ROLES).sort(
     ([roleA, _A], [roleB, _B]) =>
       creeps.filter(creep => creep.memory.role === roleA).length -
@@ -31,9 +46,7 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
       return;
     }
 
-    const creepsInRoom = creeps.filter(creep => creep.room.name === spawn.room.name);
-
-    const [production, energyPotential] = energyProduction(spawn.room, creepsInRoom);
+    const [production, energyPotential] = energyProduction(spawn.room, creeps);
 
     Game.time % 20 === 0 &&
       console.log(
@@ -42,14 +55,24 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
 
     for (const entry of sortedRoles) {
       const [roleName, role] = entry;
-      if (!isValidRole(roleName) || !role.spawnCondition(spawn.room, creeps)) {
-        // console.log(
-        //   `[${Game.time.toLocaleString()}] Room ${spawn.room.name} Cannot spawn ${roleName} due to spawn condition`
-        // );
+      if (!isValidRole(roleName)) {
+        console.log(
+          `[${Game.time.toLocaleString()}] Room ${
+            spawn.room.name
+          } Received instruction to spawn invalid role: ${roleName} `
+        );
         continue;
       }
 
-      const creepsOfRole = creepsInRoom.filter(creep => creep.memory.role === roleName);
+      if (roleName === "miner" && !minerSpawnCondition(spawn.room, hasUnoccupiedMinerPositions)) {
+        continue;
+      }
+
+      if (roleName === "laborer" && !laborerSpawnCondition(spawn.room, creeps)) {
+        continue;
+      }
+
+      const creepsOfRole = creeps.filter(creep => creep.memory.role === roleName);
 
       const [production, energyPotential] = energyProduction(spawn.room, creepsOfRole);
 
@@ -77,8 +100,8 @@ export const handleSpawning = (spawns: StructureSpawn[], creeps: Creep[]) => {
             ", "
           )}]`
         );
+        return;
       }
-      return;
     }
   });
 };

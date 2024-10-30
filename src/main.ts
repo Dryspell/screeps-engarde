@@ -4,11 +4,7 @@ import { towerBehavior } from "buildings/towers";
 import { ROLES } from "creepBehavior/roles";
 import { getExits, getUnplannedStructures } from "buildings/utils";
 import { architectRoom } from "buildings/architect";
-import {
-  getEnergyTargets,
-  getSafeEnergyTargets,
-  TransferTarget
-} from "creepBehavior/utils";
+import { getEnergyTargets, getSafeEnergyTargets, TransferTarget } from "creepBehavior/utils";
 import {
   type background,
   type email,
@@ -72,7 +68,7 @@ declare global {
     target?: string;
     spawn?: string;
     state?: "harvesting" | "upgrading" | "transferring" | "building" | "dismantling" | "surveying" | "claiming";
-    // working: boolean;
+    movingTo?: { x: number; y: number };
   }
 
   interface Game {
@@ -112,7 +108,7 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
     const creeps = Object.values(Game.creeps);
     creeps.forEach(creep => {
-      if (!creep.memory.role) {
+      if (!creep.memory.role && !creep.spawning) {
         console.log(`Creep ${creep.name} has no role`);
         if (creep.name.includes("miner")) {
           creep.memory.role = "miner";
@@ -177,9 +173,12 @@ export const loop = ErrorMapper.wrapLoop(() => {
 
       const laborers = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
 
+      if (room.name === "sim") {
+        debugger;
+      }
       dispatchLaborers(
         laborers,
-        spawns,
+        spawnsInRoom,
         sources,
         constructionSites,
         structures,
@@ -189,9 +188,13 @@ export const loop = ErrorMapper.wrapLoop(() => {
       );
 
       towerBehavior(room, structures, hostileCreeps);
-    });
 
-    handleSpawning(spawns, creeps);
+      handleSpawning(
+        spawnsInRoom,
+        creeps.filter(creep => creep.room.name === room.name),
+        Boolean(unoccupiedMinerPositions?.length)
+      );
+    });
 
     // Automatically delete memory of missing creeps
     for (const name in Memory.creeps) {

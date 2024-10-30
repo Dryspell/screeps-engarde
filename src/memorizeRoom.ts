@@ -72,58 +72,22 @@ function memorizePaths(
       flattenArray(
         (
           [
-            [
-              [-1, -1],
-              [-2, -2],
-              [-3, -3],
-              [-4, -4]
-            ],
-            [
-              [-1, 1],
-              [-2, 2],
-              [-3, 3],
-              [-4, 4]
-            ],
-            [
-              [1, 1],
-              [2, 2],
-              [3, 3],
-              [4, 4]
-            ],
-            [
-              [1, -1],
-              [2, -2],
-              [3, -3],
-              [4, -4]
-            ],
-            [
-              [-4, 0],
-              [-3, 0],
-              [-2, 0],
-              [-1, 0]
-            ],
-            [
-              [4, 0],
-              [3, 0],
-              [2, 0],
-              [1, 0]
-            ],
-            [
-              [0, 4],
-              [0, 3],
-              [0, 2],
-              [0, 1]
-            ],
-            [
-              [0, -4],
-              [0, -3],
-              [0, -2],
-              [0, -1]
-            ],
+            Array.from({ length: 7 }, (_, i) => [-1, -1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [-1, 1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [1, -1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [1, 1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [0, 1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [1, 0].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [0, -1].map(k => k * (i + 1))),
+            Array.from({ length: 7 }, (_, i) => [-1, 0].map(k => k * (i + 1))),
             Array.from({ length: 11 }, (_, i) => [i - 5, 5]),
             Array.from({ length: 11 }, (_, i) => [5, i - 5]),
             Array.from({ length: 11 }, (_, i) => [i - 5, -5]),
-            Array.from({ length: 11 }, (_, i) => [-5, i - 5])
+            Array.from({ length: 11 }, (_, i) => [-5, i - 5]),
+            Array.from({ length: 17 }, (_, i) => [i - 8, 8]),
+            Array.from({ length: 17 }, (_, i) => [8, i - 8]),
+            Array.from({ length: 17 }, (_, i) => [i - 8, -8]),
+            Array.from({ length: 17 }, (_, i) => [-8, i - 8])
           ] as [x: number, y: number][][]
         ).map(spawnPath =>
           spawns.map(spawn => [
@@ -272,6 +236,20 @@ export const memorizeRoom = profileFunction(
     Memory.rooms ??= {};
     //@ts-ignore
     Memory.rooms[room.name] ??= {};
+    Memory.rooms[room.name].costMatrix ??= (() => {
+      const terrain = new Room.Terrain(room.name);
+      const costMatrix = new PathFinder.CostMatrix();
+      for (let x = 0; x < 50; x++) {
+        for (let y = 0; y < 50; y++) {
+          if (terrain.get(x, y) === TERRAIN_MASK_WALL) {
+            costMatrix.set(x, y, 255);
+          } else if (terrain.get(x, y) === TERRAIN_MASK_SWAMP) {
+            costMatrix.set(x, y, 5);
+          }
+        }
+      }
+      return costMatrix.serialize();
+    })();
     Memory.rooms[room.name].exits ??= getExits(room);
     Memory.rooms[room.name].spawns ??= spawns.map(spawn => memorizeSpawnData(spawn));
     Memory.rooms[room.name].sources ??= sources.map(source => memorizeSourceData(source));

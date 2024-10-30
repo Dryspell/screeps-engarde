@@ -2,7 +2,7 @@ import { accessiblePositions, distance2, kmeans } from "spatial/spatial-utils";
 import { cachePath, EnergyTarget, moveToTargetByCachedPath, PATH_COLORS, TransferTarget } from "creepBehavior/utils";
 import { colors, visualizeKmeans } from "visual";
 import { profileFunction } from "utils/screeps-profiler";
-import { getEnergyFromEnergyTarget, harvestCondition, laborerTick } from "./laborer";
+import { getEnergyFromEnergyTarget, laborerState, laborerTick } from "./laborer";
 import { minerTick } from "./miner";
 import { getUnplannedStructures } from "buildings/utils";
 import { flattenArray } from "utils/arraySets";
@@ -135,13 +135,15 @@ export const dispatchLaborersByKmeans = profileFunction(
   "creeps.behavior.dispatchByEnergySource"
 );
 
+const VISUALIZE_TARGETS = true;
+
 export const dispatchMiners = profileFunction(
   (room: Room, sources: EnergyTarget[], miners: Creep[], hostileCreeps: Creep[]) => {
-    if (!miners.length) return;
-
     const minerPositions = [...Memory.rooms[room.name].minerPositions].filter(pos =>
       hostileCreeps.find(creep => distance2(creep, { pos }) > 25)
     );
+
+    if (!miners.length) return minerPositions;
 
     for (const miner of miners) {
       const standingOnMinerPosition = minerPositions.find(pos => pos.x === miner.pos.x && pos.y === miner.pos.y);
@@ -156,6 +158,15 @@ export const dispatchMiners = profileFunction(
           continue;
         }
 
+        miner.room.visual.text("🛠️", standingOnMinerPosition.x, standingOnMinerPosition.y, {
+          align: "left",
+          opacity: 0.8
+        });
+        miner.room.visual.line(miner.pos.x, miner.pos.y, standingOnMinerPosition.x, standingOnMinerPosition.y, {
+          color: "green"
+        });
+
+        source.type === "harvest" && miner.harvest(source.base);
         minerTick(miner, [source]);
         minerPositions.splice(minerPositions.indexOf(standingOnMinerPosition), 1);
         continue;
@@ -190,7 +201,28 @@ export const dispatchMiners = profileFunction(
         continue;
       }
 
-      minerTick(miner, [source]);
+      moveToTargetByCachedPath(
+        miner,
+        {
+          type: "move" as const,
+          base: {
+            pos: new RoomPosition(closestUnoccupiedPosition.x, closestUnoccupiedPosition.y, room.name),
+            room: room
+          }
+        },
+        { stroke: PATH_COLORS["harvesting"] }
+      );
+      miner.memory.target = source.base.id;
+      miner.memory.state = "harvesting";
+
+      miner.room.visual.text("🛠️", closestUnoccupiedPosition.x, closestUnoccupiedPosition.y, {
+        align: "left",
+        opacity: 0.8
+      });
+      miner.room.visual.line(miner.pos.x, miner.pos.y, closestUnoccupiedPosition.x, closestUnoccupiedPosition.y, {
+        color: "green"
+      });
+
       minerPositions.splice(minerPositions.indexOf(closestUnoccupiedPosition), 1);
     }
 
@@ -216,7 +248,28 @@ export const dispatchLaborers = profileFunction(
   ) => {
     const { harvesting, nonHarvesting } = laborers.reduce(
       (acc, creep) => {
-        if (harvestCondition(creep)) {
+        const state = laborerState(creep, constructionSites, unplannedStructures, transferTargets);
+
+        if (VISUALIZE_TARGETS && creep.memory.target) {
+          const target = Game.getObjectById(creep.memory.target);
+          if (
+            target &&
+            "pos" in target &&
+            target.pos &&
+            typeof target.pos === "object" &&
+            "x" in target.pos &&
+            typeof target.pos.x === "number" &&
+            "y" in target.pos &&
+            typeof target.pos.y === "number"
+          ) {
+            creep.room.visual.text("🛠️", target.pos.x, target.pos.y, { align: "left", opacity: 0.8 });
+            creep.room.visual.line(creep.pos.x, creep.pos.y, target.pos.x, target.pos.y, {
+              color: "green"
+            });
+          }
+        }
+
+        if (state === "harvesting") {
           acc.harvesting.push(creep);
         } else {
           acc.nonHarvesting.push(creep);
@@ -270,6 +323,16 @@ export const dispatchLaborers = profileFunction(
         )
     );
 
+    if (Memory.visual.energyAccessPositions) {
+      energyAccessPositions.forEach(({ accessiblePosition }) => {
+        laborers[0].room.visual.circle(accessiblePosition.pos.x, accessiblePosition.pos.y, {
+          radius: 0.5,
+          fill: "green",
+          opacity: 0.3
+        });
+      });
+    }
+
     for (const harvester of harvesting) {
       const accessFromMyPosition = flattenArray(
         energyTargets
@@ -304,6 +367,8 @@ export const dispatchLaborers = profileFunction(
       if (standingOnPositions.length) {
         // console.log(`Harvester ${harvester.name} is standing on an energy target access position`);
         getEnergyFromEnergyTarget(standingOnPositions[0], harvester);
+        harvester.memory.target = standingOnPositions[0].base.id;
+
         for (const standingOnPosition of standingOnPositions) {
           energyAccessPositions.splice(energyAccessPositions.indexOf(standingOnPosition), 1);
         }
@@ -318,7 +383,24 @@ export const dispatchLaborers = profileFunction(
       );
 
       if (closestPositions.length) {
-        moveToTargetByCachedPath(harvester, closestPositions[0], { stroke: PATH_COLORS["harvesting"] });
+        moveToTargetByCachedPath(
+          harvester,
+          {
+            type: "move",
+            base: {
+              pos: new RoomPosition(
+                closestPositions[0].accessiblePosition.pos.x,
+                closestPositions[0].accessiblePosition.pos.y,
+                harvester.room.name
+              ),
+              room: harvester.room
+            }
+          },
+          { stroke: PATH_COLORS["harvesting"] }
+        );
+        harvester.memory.target = closestPositions[0].base.id;
+        harvester.memory.movingTo = closestPositions[0].accessiblePosition.pos;
+
         const samePositions = energyAccessPositions.filter(
           t =>
             t.accessiblePosition.pos.x === closestPositions[0].accessiblePosition.pos.x &&

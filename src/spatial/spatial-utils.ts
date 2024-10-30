@@ -111,17 +111,15 @@ export const hollowSquare = <T extends _hasPos>(center: T, width: number) => {
 };
 
 export const costCallback = profileFunction(
-  (paths?: PathStep[][]) => (roomName: string, costMatrix: CostMatrix) => {
-    if (!paths?.length) {
-      return costMatrix;
-    }
-
-    Memory.rooms[roomName].costMatrix ??= costMatrix.serialize();
+  (paths?: PathStep[][], obstructions?: _hasPos[]) => (roomName: string, costMatrix?: CostMatrix) => {
+    // Memory.rooms[roomName].costMatrix ??= costMatrix?.serialize();
     const newMatrix = PathFinder.CostMatrix.deserialize(Memory.rooms[roomName].costMatrix);
-    paths.forEach(path => {
+    paths?.forEach(path => {
       path.forEach(step => newMatrix.set(step.x, step.y, 1));
     });
+    obstructions?.forEach(point => newMatrix.set(point.pos.x, point.pos.y, 255));
     Memory.rooms[roomName].costMatrix = newMatrix.serialize();
+
     return newMatrix;
   },
   "findPathTo.costCallback"
@@ -130,7 +128,7 @@ export const costCallback = profileFunction(
 export const splitByAdjacency = profileFunction(<T extends ActionableTarget>(creep: Creep, targets: T[]) => {
   return targets.reduce(
     (acc, target) => {
-      if (distance2(creep, target.base) < 2) {
+      if (distance2(creep, target.base) <= 2) {
         acc.adjacent.push(target);
       } else {
         acc.nonAdjacent.push(target);
@@ -148,11 +146,12 @@ export const accessiblePositions = profileFunction((energyTarget: EnergyTarget) 
     point =>
       energyTarget.base.room
         ?.lookAt(point.pos.x, point.pos.y)
-        .filter(
-          look =>
-            (look.type === "terrain" && look.terrain === "wall") ||
-            look.creep ||
-            (look.structure && !walkableStructures.includes(look.structure.structureType))
+        .filter(look =>
+          look.type === "terrain" && look.terrain === "wall"
+            ? true
+            : look.creep
+            ? true
+            : look.structure && !walkableStructures.includes(look.structure.structureType)
         ).length === 0
   );
 }, "spatial.isAccessible");

@@ -1,9 +1,7 @@
-import { getPlannedRoadsSteps } from "buildings/roads";
 import {
   EnergyTarget,
   findNaiveConstructionSite,
   getClosestSources as getClosestSources,
-  getNaiveTransferTargets,
   moveToTargetByCachedPath,
   PATH_COLORS,
   TransferTarget
@@ -13,34 +11,33 @@ import { getUnplannedStructures } from "buildings/utils";
 import { _hasPos, distance2, splitByAdjacency } from "spatial/spatial-utils";
 
 export const switchState = (creep: Creep, newState: CreepMemory["state"]) => {
-  if (creep.memory.state === newState) return;
+  if (creep.memory.state === newState) return newState;
+
+  //? For some reason they keep switching states but can't figure out why
+  // console.log(
+  //   `[${Game.time.toLocaleString()}]: Room ${creep.room.name}, ${creep.name} Switching from ${
+  //     creep.memory.state
+  //   } to ${newState}`
+  // );
 
   creep.memory.state = newState;
   newState && creep.say(newState);
-  console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name}, ${creep.name} Switching to ${newState}`);
+  return newState;
 };
 
-export const harvestCondition = (creep: Creep) => {
-  const conditionSatisfied =
-    !creep.memory.state ||
-    creep.store[RESOURCE_ENERGY] === 0 ||
-    (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
-
-  conditionSatisfied && switchState(creep, "harvesting");
-
-  return conditionSatisfied;
-};
-
-const laborerState = profileFunction(
+export const laborerState = profileFunction(
   (
     creep: Creep,
     constructionSites: ConstructionSite<BuildableStructureConstant>[],
     unplannedStructures: AnyStructure[],
-    energyTargets: EnergyTarget[],
     transferTargets: TransferTarget[]
   ) => {
-    if (harvestCondition(creep)) {
-      switchState(creep, "harvesting");
+    if (
+      !creep.memory.state ||
+      creep.store[RESOURCE_ENERGY] === 0 ||
+      (creep.memory.state === "harvesting" && creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0)
+    ) {
+      return switchState(creep, "harvesting");
     } else if (
       creep.room.energyAvailable >= creep.room.energyCapacityAvailable &&
       constructionSites.length &&
@@ -48,7 +45,7 @@ const laborerState = profileFunction(
       creep.room.controller.ticksToDowngrade > 1000 &&
       creep.room.controller.level > 1
     ) {
-      switchState(creep, "building");
+      return switchState(creep, "building");
     } else if (
       creep.room.energyAvailable >= creep.room.energyCapacityAvailable &&
       unplannedStructures.length &&
@@ -57,21 +54,21 @@ const laborerState = profileFunction(
       creep.room.controller.level > 1 &&
       creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0
     ) {
-      switchState(creep, "dismantling");
+      return switchState(creep, "dismantling");
     } else if (
       creep.room.controller &&
       (creep.room.energyAvailable >= creep.room.energyCapacityAvailable ||
         (creep.memory.state === "upgrading" && creep.store[RESOURCE_ENERGY] > 0))
     ) {
-      switchState(creep, "upgrading");
+      return switchState(creep, "upgrading");
     } else if (
       transferTargets.length &&
       (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0 ||
         (creep.memory.state === "transferring" && creep.store[RESOURCE_ENERGY] > 0))
     ) {
-      switchState(creep, "transferring");
+      return switchState(creep, "transferring");
     } else {
-      switchState(creep, "upgrading");
+      return switchState(creep, "upgrading");
     }
   },
   "creeps.behavior.laborer.state"
@@ -98,7 +95,7 @@ const laborerBuild = profileFunction(
       if (creep.build(target.base) == ERR_NOT_IN_RANGE) {
         creep.memory.target = target.base.id;
 
-        // const message = `[${creep.name}]: Moving to construction site ${target.id} at ${target.pos}`;
+        // const message = `[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: Moving to construction site ${target.id} at ${target.pos}`;
         // console.log(message);
         moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["building"] });
       }
@@ -120,7 +117,7 @@ const laborerDismantle = profileFunction(
   ) => {
     const target = creep.pos.findClosestByPath(unplannedStructures);
     if (!target) {
-      console.log(`[${creep.name}]: No unplanned structures found`);
+      console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: No unplanned structures found`);
       return;
     }
 
@@ -241,7 +238,7 @@ const laborerTransfer = profileFunction((creep: Creep, transferTargets: Transfer
       moveToTargetByCachedPath(creep, target, { stroke: PATH_COLORS["transferring"] });
       return;
     } else if (transferResult !== OK) {
-      console.log(`[${creep.name}]: Transfer result: ${transferResult}`);
+      console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: Transfer result: ${transferResult}`);
       return;
     }
   }
@@ -273,8 +270,6 @@ export const laborerTick = profileFunction(
     primaryEnergyTargets: EnergyTarget[],
     transferTargets: TransferTarget[]
   ) => {
-    laborerState(creep, constructionSites, unplannedStructures, energyTargets, transferTargets);
-
     switch (creep.memory.state) {
       case "building": {
         return laborerBuild(creep, spawns, sources, structures, constructionSites, unplannedStructures);
@@ -297,8 +292,8 @@ export const laborerTick = profileFunction(
       }
 
       default: {
-        console.log(`[${creep.name}]: Unhandled state ${creep.memory.state}`);
-        creep.memory.state = "harvesting";
+        console.log(`[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: Unhandled state ${creep.memory.state}`);
+        switchState(creep, "harvesting");
         return;
       }
     }

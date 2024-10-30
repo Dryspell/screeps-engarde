@@ -1,6 +1,4 @@
 import { claimerTick } from "creepBehavior/claimer";
-import { laborerTick } from "./laborer";
-import { minerTick } from "./miner";
 
 const bodyCost = (body: BodyPartConstant[]) => body.reduce((acc, part) => acc + BODYPART_COST[part], 0);
 
@@ -20,41 +18,49 @@ export const ROLES = {
         availableEnergy -= BODYPART_COST[WORK];
       }
       return bodyParts;
-    },
-    spawnCondition: (room: Room, creeps: Creep[]) => {
-      const nonMinerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role !== "miner");
-      const minerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
+    }
+    // spawnCondition: (room: Room, creeps: Creep[]) => {
+    //   const nonMinerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role !== "miner");
+    //   const minerCreeps = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "miner");
 
-      return (
-        room.energyAvailable >= bodyCost([MOVE, WORK, WORK]) &&
-        nonMinerCreeps.length &&
-        Memory.rooms[room.name].minerPositions?.length &&
-        minerCreeps.length < Memory.rooms[room.name].minerPositions?.length &&
-        nonMinerCreeps.length >= minerCreeps.length
-      );
-    },
-    tick: minerTick
+    //   return (
+    //     room.energyAvailable >= bodyCost([MOVE, WORK, WORK]) &&
+    //     nonMinerCreeps.length &&
+    //     Memory.rooms[room.name].minerPositions?.length &&
+    //     minerCreeps.length < Memory.rooms[room.name].minerPositions?.length &&
+    //     nonMinerCreeps.length >= minerCreeps.length
+    //   );
+    // }
   },
   // multirole harvester, upgrader, builder
   laborer: {
+    // generateBody: (spawn: StructureSpawn) => {
+    //   const defaultBody: BodyPartConstant[] = [WORK, MOVE, CARRY];
+    //   let availableEnergy = spawn.room.energyAvailable - bodyCost(defaultBody);
+    //   const bodyParts = defaultBody;
+
+    //   while (availableEnergy >= BODYPART_COST[WORK]) {
+    //     bodyParts.push(WORK);
+    //     availableEnergy -= BODYPART_COST[WORK];
+    //   }
+    //   return bodyParts;
+    // },
     body: [WORK, CARRY, MOVE] satisfies BodyPartConstant[],
-    max: 6,
-    tick: laborerTick,
-    spawnCondition: (room: Room, creeps: Creep[]) => {
-      const laborersInRoom = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
-      return (
-        (Memory.rooms[room.name].minerPositions?.length &&
-          laborersInRoom.length < Memory.rooms[room.name].minerPositions?.length) ||
-        laborersInRoom.length < 1
-      );
-    }
+    // spawnCondition: (room: Room, creeps: Creep[]) => {
+    //   const laborersInRoom = creeps.filter(creep => creep.room.name === room.name && creep.memory.role === "laborer");
+    //   return (
+    //     (Memory.rooms[room.name].minerPositions?.length &&
+    //       laborersInRoom.length < Memory.rooms[room.name].minerPositions?.length) ||
+    //     laborersInRoom.length < 1
+    //   );
+    // }
   },
   claimer: {
     body: [CLAIM, MOVE] satisfies BodyPartConstant[],
-    max: 1,
     tick: claimerTick,
     spawnCondition: (room: Room, creeps: Creep[]) =>
-      false && room.energyAvailable >= 650 &&
+      false &&
+      room.energyAvailable >= 650 &&
       Object.keys(Game.rooms).length + creeps.filter(creep => creep.memory.role === "claimer").length < Game.gcl.level
   }
 } as const;

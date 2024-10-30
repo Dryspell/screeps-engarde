@@ -1,3 +1,4 @@
+import { DIRECTIONS } from "spatial/constants";
 import { _hasPos, costCallback, distance2, serializeCoord, walkableStructures } from "spatial/spatial-utils";
 import { profileFunction } from "utils/screeps-profiler";
 
@@ -34,6 +35,11 @@ export type UpgradeTarget = {
 export type DismantleTarget = {
   type: "dismantle";
   base: Structure;
+};
+
+export type MovementPosition = {
+  type: "move";
+  base: { pos: RoomPosition; room: Room };
 };
 
 export type ActionableTarget = EnergyTarget | TransferTarget | BuildTarget | UpgradeTarget | DismantleTarget;
@@ -91,75 +97,123 @@ export const getSafeEnergyTargets = profileFunction(
   "spatial.getSafeEnergyStores"
 );
 
-export const cachePath = profileFunction(<T extends _hasPos>(sourcePos: T, target: ActionableTarget) => {
-  if (sourcePos.pos.x !== Math.round(sourcePos.pos.x) || sourcePos.pos.y !== Math.round(sourcePos.pos.y)) {
-    const message = `Invalid sourcePos: ${sourcePos.pos.x}, ${sourcePos.pos.y}`;
-    console.log(message);
-    throw new Error(message);
-  }
-  if (target.base.pos.x !== Math.round(target.base.pos.x) || target.base.pos.y !== Math.round(target.base.pos.y)) {
-    const message = `Invalid targetPos: ${target.base.pos.x}, ${target.base.pos.y}`;
-    console.log(message);
-    throw new Error(message);
-  }
+const roomPositionsToPath = (path: RoomPosition[]) => {
+  const pathSteps = [] as PathStep[];
+  path.slice(0, -1).map((p, i) => {
+    const [dx, dy] = [path[i + 1]?.x - p.x, path[i + 1]?.y - p.y];
+    // console.log(`dx: ${dx}, dy: ${dy}`);
+    const direction = DIRECTIONS.find(dir => dir[1][0] === dx && dir[1][1] === dy)?.[0];
+    // console.log(`Direction: ${direction}`);
+    if (direction) pathSteps.push({ x: p.x, y: p.y, dx, dy, direction });
+  });
+  return pathSteps;
+};
 
-  if (sourcePos.pos.x === target.base.pos.x && sourcePos.pos.y === target.base.pos.y) {
-    return "";
-  }
-  const room = target.base.room;
-  if (!room) {
-    return "";
-  }
+export const cachePath = profileFunction(
+  <T extends _hasPos>(sourcePos: T, target: ActionableTarget | MovementPosition) => {
+    if (sourcePos.pos.x !== Math.round(sourcePos.pos.x) || sourcePos.pos.y !== Math.round(sourcePos.pos.y)) {
+      const message = `Invalid sourcePos: ${sourcePos.pos.x}, ${sourcePos.pos.y}`;
+      console.log(message);
+      throw new Error(message);
+    }
+    if (target.base.pos.x !== Math.round(target.base.pos.x) || target.base.pos.y !== Math.round(target.base.pos.y)) {
+      const message = `Invalid targetPos: ${target.base.pos.x}, ${target.base.pos.y}`;
+      console.log(message);
+      throw new Error(message);
+    }
 
-  room.memory.cachedPaths ??= {};
-  room.memory.cachedPaths[target.base.pos.x] ??= {};
-  room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
-  room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x] ??= {};
-
-  if (!room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y]) {
-    const roomPosition = new RoomPosition(sourcePos.pos.x, sourcePos.pos.y, room.name);
-    const path = roomPosition.findPathTo(target.base.pos.x, target.base.pos.y, {
-      ignoreCreeps: true,
-      costCallback: costCallback(Memory.rooms[room.name].paths?.map(p => p.path))
-    });
-
-    if (!path?.length) {
-      console.log(
-        `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`,
-        path.map(path => `(${path.x},${path.y})`).join("->")
-      );
+    if (sourcePos.pos.x === target.base.pos.x && sourcePos.pos.y === target.base.pos.y) {
+      return "";
+    }
+    const room = target.base.room;
+    if (!room) {
       return "";
     }
 
-    const serializedPath = Room.serializePath(path);
-    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y] ??= serializedPath;
+    room.memory.cachedPaths ??= {};
+    room.memory.cachedPaths[target.base.pos.x] ??= {};
+    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y] ??= {};
+    room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x] ??= {};
 
-    path.forEach((step, i) => {
-      if (!room) {
-        return;
+    if (!room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y]) {
+      const roomPosition = new RoomPosition(sourcePos.pos.x, sourcePos.pos.y, room.name);
+      const path = roomPosition.findPathTo(target.base.pos.x, target.base.pos.y, {
+        ignoreCreeps: true,
+        costCallback: costCallback()
+      });
+      // const { path, cost, ops, incomplete } = PathFinder.search(
+      //   roomPosition,
+      //   { pos: target.base.pos, range: target.type === "move" ? 0 : 1 },
+      //   {
+      //     roomCallback: costCallback(),
+      //     plainCost: 2,
+      //     swampCost: 10,
+      //     maxOps: 1000,
+      //     maxRooms: 1
+      //   }
+      // );
+
+      // console.log(
+      //   `${incomplete ? "Incomplete" : "Complete"} Path from ${sourcePos.pos.x},${sourcePos.pos.y} to ${
+      //     target.base.pos.x
+      //   },${target.base.pos.y} found for ${cost} cost and ${ops} ops: ${path.map(p => `(${p.x},${p.y})`).join("->")}`
+      // );
+      //  const deserializedPath = roomPositionsToPath(path);
+      //  const serializedPath = Room.serializePath(roomPositionsToPath(path));
+
+      if (!path?.length) {
+        console.log(
+          `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`,
+          path.map(path => `(${path.x},${path.y})`).join("->")
+        );
+        return "";
       }
-      if (room.memory.cachedPaths[target.base.pos.x]?.[target.base.pos.y]?.[step.x]?.[step.y]) return;
 
-      room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x] ??= {};
-      room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x][step.y] ??= `${serializeCoord(
-        step.x
-      )}${serializeCoord(step.y)}${serializedPath.slice(4 + i)}`;
-    });
-  }
+      const serializedPath = Room.serializePath(path);
 
-  const res = room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y];
+      // console.log(
+      //   `Serialized path: ${serializedPath}, Deserialized path: ${deserializedPath
+      //     .map(path => `(${path.x},${path.y})`)
+      //     .join("->")}`
+      // );
 
-  // if (!res) {
-  //   console.log(
-  //     `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`
-  //   );
-  // }
+      room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y] ??=
+        serializedPath;
 
-  return res;
-}, "spatial.cachePath");
+      path.forEach((step, i) => {
+        if (!room) {
+          return;
+        }
+        if (room.memory.cachedPaths[target.base.pos.x]?.[target.base.pos.y]?.[step.x]?.[step.y]) return;
 
+        // console.log(`Caching path from ${step.x},${step.y} to ${target.base.pos.x},${target.base.pos.y}`);
+        room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x] ??= {};
+        room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][step.x][step.y] ??= `${serializeCoord(
+          step.x
+        )}${serializeCoord(step.y)}${serializedPath.slice(4 + i)}`;
+      });
+    }
+
+    const res = room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][sourcePos.pos.x][sourcePos.pos.y];
+
+    // if (!res) {
+    //   console.log(
+    //     `No path found from ${sourcePos.pos.x},${sourcePos.pos.y} to ${target.base.pos.x},${target.base.pos.y}`
+    //   );
+    // }
+
+    return res;
+  },
+  "spatial.cachePath"
+);
+
+const USE_BASIC_PATHFINDING = true;
 export const moveToTargetByCachedPath = profileFunction(
-  (creep: Creep, target: ActionableTarget, visualizePathStyle?: MapPolyStyle) => {
+  (creep: Creep, target: ActionableTarget | MovementPosition, visualizePathStyle?: MapPolyStyle) => {
+    if (USE_BASIC_PATHFINDING) {
+      return creep.moveTo(target.base, { visualizePathStyle, maxOps: 1000, reusePath: 50 });
+    }
+
     const room = target.base.room;
     if (!room) {
       return ERR_NO_PATH;
@@ -176,6 +230,7 @@ export const moveToTargetByCachedPath = profileFunction(
 
     if (!path) {
       console.log(`Could not find path for ${creep.name}`);
+      delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
       return ERR_NO_PATH;
     }
 
@@ -200,12 +255,8 @@ export const moveToTargetByCachedPath = profileFunction(
     }
 
     if (!deserializedPath[1]) {
-      // console.log(`[${Game.time}] ${creep.room.name} ${creep.name} Invalid path: ${JSON.stringify(deserializedPath)}`);
-      return ERR_NO_PATH;
+      creep.moveTo(target.base, { visualizePathStyle, maxOps: 1000 });
     }
-
-    // console.log(`${JSON.stringify(creep.pos)}, ${JSON.stringify(deserializedPath[1])}`);
-    // const nextStep = new RoomPosition(deserializedPath[1].x, deserializedPath[1].y, creep.room.name);
 
     const obstructions = deserializedPath
       .slice(1)
@@ -220,29 +271,65 @@ export const moveToTargetByCachedPath = profileFunction(
           )
           .map(lookResult => ({ ...lookResult, ...step }))
       )
-      .filter(lookResults => lookResults.length);
-
-    if (obstructions.length) {
-      for (const obstructionListByPos of obstructions) {
-        if (obstructionListByPos.every(lookResult => lookResult.creep)) {
-          continue;
+      .reduce(
+        (acc, lookResults) => {
+          lookResults.forEach(lookResult => {
+            lookResult.creep
+              ? acc.creep.push(lookResult)
+              : target.type === "move"
+              ? acc.nonCreep.push(lookResult)
+              : lookResult.x !== target.base.pos.x && lookResult.y !== target.base.pos.y
+              ? acc.nonCreep.push(lookResult)
+              : true;
+          });
+          return acc;
+        },
+        {
+          creep: [] as (LookAtResult<LookConstant> & (typeof deserializedPath)[number])[],
+          nonCreep: [] as (LookAtResult<LookConstant> & (typeof deserializedPath)[number])[]
         }
+      );
 
+    const firstNonObstructedPosition = deserializedPath
+      .slice(1)
+      .find(
+        p =>
+          !obstructions.nonCreep.find(o => o.x === p.x && o.y === p.y) &&
+          !obstructions.creep.find(o => o.x === p.x && o.y === p.y)
+      );
+
+    if (obstructions.nonCreep.length) {
+      delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
+      const costMatrix = PathFinder.CostMatrix.deserialize(Memory.rooms[creep.room.name].costMatrix);
+
+      for (const obstruction of obstructions.nonCreep) {
         console.log(
-          `${creep.room.name} ${creep.name} Cached path was obstructed from ${creep.pos.x},${creep.pos.y} to ${
-            target.base.pos.x
-          },${target.base.pos.y} at ${obstructionListByPos[0].x},${obstructionListByPos[0].y} by ${obstructionListByPos
-            .map(obs => obs.type)
-            .join(", ")}`
+          `${creep.room.name} ${creep.name} Cached path was obstructed from ${creep.pos.x},${creep.pos.y} to ${target.base.pos.x},${target.base.pos.y} at ${obstruction.x},${obstruction.y} by ${obstruction.type}`
         );
-        creep.room.visual.text("!", obstructionListByPos[0].x, obstructionListByPos[0].y, { color: "red" });
-        delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y][creep.pos.x][creep.pos.y];
-        break;
+        creep.room.visual.text("!", obstruction.x, obstruction.y, { color: "red" });
+        delete room.memory.cachedPaths[target.base.pos.x][target.base.pos.y]?.[obstruction.x]?.[obstruction.y];
+        costMatrix.set(obstruction.x, obstruction.y, 255);
       }
+      Memory.rooms[creep.room.name].costMatrix = costMatrix.serialize();
 
-      return creep.moveTo(target.base, { visualizePathStyle });
+      return creep.moveTo(
+        firstNonObstructedPosition
+          ? new RoomPosition(firstNonObstructedPosition.x, firstNonObstructedPosition.y, creep.room.name)
+          : target.base,
+        { visualizePathStyle, maxOps: 1000 }
+      );
+    } else if (obstructions.creep.length) {
+      for (const obstruction of obstructions.nonCreep) {
+        creep.room.visual.text("!", obstruction.x, obstruction.y, { color: "red" });
+      }
+      return creep.moveTo(
+        firstNonObstructedPosition
+          ? new RoomPosition(firstNonObstructedPosition.x, firstNonObstructedPosition.y, creep.room.name)
+          : target.base,
+        { visualizePathStyle, maxOps: 1000 }
+      );
     } else {
-      return creep.move(deserializedPath[1].direction);
+      return creep.move(deserializedPath[0].direction);
     }
 
     // return path.slice(4).length < 5 ? creep.moveTo(target.base, { visualizePathStyle }) : creep.moveByPath(path);

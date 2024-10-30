@@ -8,8 +8,10 @@ const attemptToBuildCloseConstructionSites = (
   creep: Creep,
   closeConstructionSites = creep.pos.findInRange(FIND_MY_CONSTRUCTION_SITES, 3)
 ) => {
-  if (!creep.body.some(part => part.type === "carry") || !creep.store.getUsedCapacity(RESOURCE_ENERGY)) {
-    return;
+  if (!creep.body.some(part => part.type === "carry")) {
+    return ERR_NO_BODYPART;
+  } else if (!creep.store.getUsedCapacity(RESOURCE_ENERGY)) {
+    return ERR_NOT_ENOUGH_RESOURCES;
   }
 
   for (const site of closeConstructionSites) {
@@ -18,8 +20,10 @@ const attemptToBuildCloseConstructionSites = (
       return;
     } else {
       console.log(`[${creep.room.name}]: ${creep.name} Failed to build ${site.id} with result ${buildResult}`);
+      return buildResult;
     }
   }
+  return ERR_NOT_FOUND;
 };
 
 export const minerTick = profileFunction((creep: Creep, energyTargets: EnergyTarget[]) => {
@@ -45,18 +49,33 @@ export const minerTick = profileFunction((creep: Creep, energyTargets: EnergyTar
       attemptToBuildCloseConstructionSites(creep, closeConstructionSites);
     }
   } else if (adjacent.length && adjacent[0].type === "harvest") {
-    creep.harvest(adjacent[0].base);
+    if (adjacent[0].base.energy) {
+      const harvestResult = creep.harvest(adjacent[0].base);
+      if (harvestResult !== OK) {
+        console.log(
+          `[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name} Failed to harvest ${
+            adjacent[0].base.id
+          } with result ${harvestResult}`
+        );
+      }
+    }
   } else {
     const naivestSources = getClosestSources(nonAdjacent, creep);
 
     if (!naivestSources.length) {
-      console.log(`[${creep.name}]: No sources found to harvest`);
+      console.log(
+        `[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: No sources found to harvest`
+      );
       return;
     }
 
     const target = naivestSources[0];
     if (target.type !== "harvest") {
-      console.log(`[${creep.name}]: Expected target to be a harvest source, but got ${target.type}`);
+      console.log(
+        `[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${
+          creep.name
+        }: Expected target to be a harvest source, but got ${target.type}`
+      );
       return;
     }
 
@@ -64,7 +83,9 @@ export const minerTick = profileFunction((creep: Creep, energyTargets: EnergyTar
       creep.memory.target = target.base.id;
       creep.moveTo(target.base, { visualizePathStyle: { stroke: PATH_COLORS[creep.memory.state ?? "harvesting"] } });
     } else if (creep.harvest(target.base) === ERR_NOT_ENOUGH_RESOURCES) {
-      console.log(`[${creep.name}]: Source ${target.base.id} is empty`);
+      console.log(
+        `[${Game.time.toLocaleString()}]: Room ${creep.room.name} ${creep.name}: Source ${target.base.id} is empty`
+      );
       attemptToBuildCloseConstructionSites(creep);
     }
   }

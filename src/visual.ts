@@ -10,7 +10,9 @@ export const VISUALIZATION_TOGGLES = {
   walls: true,
   unplannedStructures: true,
   kmeans: true,
-  cachedPaths: false
+  cachedPaths: true,
+  energyAccessPositions: true,
+  costMatrix: false
 };
 
 export const randomColors = (length: number) =>
@@ -119,6 +121,62 @@ const visualizePaths = (room: Room) => {
   }
 };
 
+function rgbToHex(r: number, g: number, b: number): string {
+  // Clamp values to be in the range of 0-255
+  r = Math.max(0, Math.min(255, r));
+  g = Math.max(0, Math.min(255, g));
+  b = Math.max(0, Math.min(255, b));
+
+  // Convert to hex and pad with leading zeros if necessary
+  const hex = ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+
+  return `#${hex}`;
+}
+
+interface RGB {
+  r: number;
+  g: number;
+  b: number;
+}
+
+function hexToRgb(hex: string): RGB | null {
+  // Remove the hash at the start if it's there
+  hex = hex.replace(/^#/, "");
+
+  // Check if the hex format is valid
+  if (hex.length !== 6) {
+    return null; // Return null for invalid hex input
+  }
+
+  // Parse the hex values
+  let bigint = parseInt(hex, 16);
+  let r = (bigint >> 16) & 255;
+  let g = (bigint >> 8) & 255;
+  let b = bigint & 255;
+
+  return { r, g, b };
+}
+
+const visualizeCostMatrix = (room: Room) => {
+  Memory.visual.costMatrix ??= VISUALIZATION_TOGGLES.costMatrix;
+  if (!Memory.visual.costMatrix) return;
+  if (!Memory.rooms[room.name].costMatrix) return;
+
+  const costMatrix = PathFinder.CostMatrix.deserialize(Memory.rooms[room.name].costMatrix);
+
+  const rectWidth = 1;
+  const halfWidth = rectWidth / 2;
+
+  for (let x = 0; x < 50; x++) {
+    for (let y = 0; y < 50; y++) {
+      const cost = costMatrix.get(x, y);
+      const color = rgbToHex(255 - cost, 255 - cost, 255 - cost);
+
+      room.visual.rect(x - halfWidth, y - halfWidth, rectWidth, rectWidth, { fill: color, opacity: 0.5 });
+    }
+  }
+};
+
 export const visualize = profileFunction((room: Room, creeps: Creep[]) => {
   Memory.rooms[room.name].paths.forEach(path => visualizeRoad(room, path.path));
 
@@ -126,6 +184,7 @@ export const visualize = profileFunction((room: Room, creeps: Creep[]) => {
   visualizeExtensions(room);
   visualizeContainers(room);
   visualizeWalls(room);
+  visualizeCostMatrix(room);
 
   // visualizePaths(room);
 }, "visual");
